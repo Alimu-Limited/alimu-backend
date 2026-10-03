@@ -384,7 +384,7 @@ async function loadActivity(){
   const rows=d.data||[];
   $('activityMeta').textContent=rows.length+' events · last '+hours+'h · live';
   const cmap={payment:'var(--accent)',queue:'var(--cyan)',mikrotik:'var(--text-secondary)',callback:'var(--purple)',success:'var(--gold)',expired:'var(--warning)'};
-  $('activityFeed').innerHTML=rows.length?rows.map(r=>{const c=cmap[r.source]||'var(--text-secondary)';const t=new Date(r.created_at);return `<div style="padding:5px 0;border-bottom:1px dashed rgba(255,255,255,.06)"><span style="color:var(--text-muted)">${t.toLocaleDateString('en-NG',{month:'short',day:'numeric'})} ${t.toLocaleTimeString()}</span> <span style="color:${c};font-weight:700">[${esc(r.source)}]</span> ${esc(r.message)}</div>`;}).join(''):'<div style="color:var(--text-muted)">No activity yet</div>';
+  $('activityFeed').innerHTML=rows.length?rows.map(r=>{const t=new Date(r.created_at);return `<div style="padding:5px 0;border-bottom:1px dashed rgba(255,255,255,.06);white-space:normal"><span style="color:var(--text-muted)">${t.toLocaleTimeString()} </span>${esc(r.message)}</div>`;}).join(''):'<div style="color:var(--text-muted)">No activity yet</div>';
 }
 function fmtIdle(s){s=Math.max(0,Number(s)||0);const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;return h?`${h}h ${m}m idle`:`${m}m ${sec}s idle`;}
 async function showSessions(){
