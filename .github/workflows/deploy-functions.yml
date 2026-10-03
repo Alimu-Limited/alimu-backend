@@ -34,6 +34,8 @@ jobs:
           SQUAD_SECRET_KEY=${{ secrets.SQUAD_SECRET_KEY }}
           SQUAD_BASE_URL=${{ secrets.SQUAD_BASE_URL }}
           PAYSTACK_SECRET_KEY=${{ secrets.PAYSTACK_SECRET_KEY }}
+          ADMIN_SUPER_PASS=${{ secrets.ADMIN_SUPER_PASS }}
+          ADMIN_VIEW_PASS=${{ secrets.ADMIN_VIEW_PASS }}
           PUBLIC_BASE_URL=${{ secrets.PUBLIC_BASE_URL }}
           EOF
 
