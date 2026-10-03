@@ -108,12 +108,14 @@ export async function handleAdmin(req: Request, path: string): Promise<Response>
   if (path === "/admin/api/users" && method === "GET") {
     const page = Math.max(1, parseInt(q.get("page") || "1", 10));
     const search = (q.get("search") || "").trim();
+    const status = (q.get("status") || "").trim();
     const perPage = 100;
     const from = (page - 1) * perPage;
     let query = getSupabase().from("payment_queue")
       .select("id, mikrotik_username, mikrotik_password, plan, status, mac_address, customer_email, expires_at, created_at", { count: "exact" })
       .order("created_at", { ascending: false })
       .range(from, from + perPage - 1);
+    if (status && status !== "all") query = query.eq("status", status);
     if (search) query = query.or(`mikrotik_username.ilike.%${search}%,mac_address.ilike.%${search}%,customer_email.ilike.%${search}%`);
     const { data, count, error } = await query;
     if (error) return json({ error: error.message }, 500);
