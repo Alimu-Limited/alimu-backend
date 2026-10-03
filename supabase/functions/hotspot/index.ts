@@ -99,6 +99,23 @@ async function hmacHex(secret: string, message: string, hash = "SHA-512"): Promi
   return hex(new Uint8Array(sig));
 }
 
+async function logActivity(
+  source: string,
+  message: string,
+  opts: { level?: string; ref?: string; username?: string; mac?: string } = {},
+): Promise<void> {
+  try {
+    await getSupabase().from("activity_log").insert({
+      source,
+      message,
+      level: opts.level || "info",
+      ref: opts.ref || null,
+      username: opts.username || null,
+      mac: opts.mac || null,
+    });
+  } catch (_) { /* never fail the main flow for logging */ }
+}
+
 // ---------- payment providers ----------
 async function initSquad(
   { email, amount, plan, mac }: { email?: string; amount: number; plan: string; mac?: string },
@@ -185,6 +202,7 @@ async function enqueue(
     one_time_token: token,
   });
   console.log(`🙋 Queued ${username} | ${planCode} | MAC:${mac} | Ref:${ref}`);
+  await logActivity("queue", `Queued ${username} | Plan:${planCode} | MAC:${mac} | Ref:${ref}`, { ref, username, mac, level: "queue" });
 }
 
 function resolvePlan(raw?: string): { planCode: string; amount: number } | null {
@@ -221,6 +239,7 @@ async function mikrotikQueueText(): Promise<Response> {
     r.expires_at ? new Date(r.expires_at).toISOString() : "",
     r.id,
   ].join("|"));
+  await logActivity("mikrotik", `Preparing ${data.length} user(s) for MikroTik`, { level: "mikrotik" });
   return text(lines.join("\n"));
 }
 
@@ -234,6 +253,7 @@ async function markProcessed(idRaw: string): Promise<Response> {
     .select("id");
   if (error) return json({ success: false, error: error.message }, 500);
   if (!data || data.length === 0) return json({ success: false, error: "User not found" }, 404);
+  await logActivity("mikrotik", `Marked ${id} as processed`, { level: "mikrotik" });
   return json({ success: true, id });
 }
 
@@ -264,7 +284,10 @@ async function markExpired(idRaw: string): Promise<Response> {
     .eq("id", id)
     .eq("status", "processed")
     .select("mikrotik_username");
-  if (data && data.length > 0) return json({ success: true, id });
+  if (data && data.length > 0) {
+    await logActivity("mikrotik", `Marked ${id} as expired`, { level: "expired" });
+    return json({ success: true, id });
+  }
   return json({ success: false });
 }
 
@@ -461,7 +484,8 @@ serve(async (req: Request) => {
       if (!selected) return html(errorPage("Invalid plan selected"), 400);
       if (!email) return html(errorPage("Email address is required to complete purchase."), 400);
       try {
-        const { checkoutUrl } = await initPayment({ email, amount: selected.amount, plan: selected.code, mac });
+        const { checkoutUrl, paymentReference } = await initPayment({ email, amount: selected.amount, plan: selected.code, mac });
+        await logActivity("pay", `Payment initiated [${await getActiveProvider()}] ${plan} | MAC:${mac} | Email:${email} | Ref:${paymentReference}`, { ref: paymentReference, mac, level: "payment" });
         return new Response(null, { status: 302, headers: { Location: checkoutUrl } });
       } catch (e) {
         console.error("payment init error", e);
@@ -480,6 +504,7 @@ serve(async (req: Request) => {
           plan: String(plan),
           mac: mac_address as string,
         });
+        await logActivity("pay", `Payment initiated [${await getActiveProvider()}] ${plan} | MAC:${mac_address} | Email:${email} | Ref:${paymentReference}`, { ref: paymentReference, mac: String(mac_address || ""), level: "payment" });
         return json({ success: true, checkout_url: checkoutUrl, payment_reference: paymentReference });
       } catch (e) {
         console.error("initialize error", e);
@@ -550,16 +575,19 @@ serve(async (req: Request) => {
 
     if (path === "/squad-callback" && method === "GET") {
       const ref = queryParams(req).get("transaction_ref") || queryParams(req).get("reference") || "";
+      await logActivity("callback", `Squad callback: ${ref}`, { ref, level: "callback" });
       return new Response(null, { status: 302, headers: { Location: `${SUCCESS_PAGE}?reference=${encodeURIComponent(ref)}` } });
     }
     if (path === "/paystack-callback" && method === "GET") {
       const ref = queryParams(req).get("reference") || queryParams(req).get("trxref") || "";
+      await logActivity("callback", `Paystack callback: ${ref}`, { ref, level: "callback" });
       return new Response(null, { status: 302, headers: { Location: `${SUCCESS_PAGE}?reference=${encodeURIComponent(ref)}` } });
     }
 
     // ---- status / creds ----
     if (path === "/success" && method === "GET") {
       const ref = queryParams(req).get("reference") || queryParams(req).get("trxref") || queryParams(req).get("paymentReference") || "";
+      await logActivity("success", `Success page accessed, ref: ${ref}`, { ref, level: "success" });
       return html(successPage(ref));
     }
     if (path === "/api/check-status" && method === "GET") return await checkStatus(queryParams(req).get("ref") || "");

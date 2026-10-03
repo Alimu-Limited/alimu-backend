@@ -105,6 +105,19 @@ export async function handleAdmin(req: Request, path: string): Promise<Response>
     return json({ success: true, data, month });
   }
 
+  if (path === "/admin/api/activity" && method === "GET") {
+    const hours = Math.min(168, Math.max(1, parseInt(q.get("hours") || "48", 10)));
+    const limit = Math.min(500, Math.max(10, parseInt(q.get("limit") || "200", 10)));
+    const since = new Date(Date.now() - hours * 3600 * 1000).toISOString();
+    const { data, error } = await getSupabase().from("activity_log")
+      .select("id, created_at, level, source, message, ref, username, mac")
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) return json({ error: error.message }, 500);
+    return json({ success: true, data, hours });
+  }
+
   if (path === "/admin/api/monthly" && method === "GET") {
     const { data, error } = await getSupabase().rpc("admin_monthly");
     if (error) return json({ error: error.message }, 500);
