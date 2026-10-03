@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Payment Successful — Dream Hatcher</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Segoe UI',Arial,sans-serif;background:#0a1b0d;color:#f0fff2;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;
+    background-image:radial-gradient(ellipse at top left,rgba(55,209,95,.12) 0,transparent 45%),radial-gradient(ellipse at bottom right,rgba(246,233,78,.06) 0,transparent 45%)}
+  .c{background:#143220;border:1px solid #1f5029;border-radius:20px;padding:30px;max-width:420px;width:100%;text-align:center;box-shadow:0 25px 50px -12px rgba(0,0,0,.7)}
+  h2{color:#37d15f;margin-bottom:10px;font-size:22px}
+  .cred{background:#f0fff2;color:#04120c;padding:12px;border-radius:8px;margin:6px 0;font-family:monospace;font-size:18px;font-weight:700;word-break:break-all}
+  .lbl{font-size:12px;color:#9fc7a6;text-align:left;margin-top:8px}
+  .b{background:linear-gradient(135deg,#37d15f,#92fe9d);color:#04120c;border:none;padding:14px 28px;border-radius:50px;font-weight:800;cursor:pointer;margin-top:14px;font-size:15px}
+  .sp{width:42px;height:42px;border:3px solid rgba(255,255,255,.15);border-top:3px solid #37d15f;border-radius:50%;animation:s 1s linear infinite;margin:16px auto}
+  @keyframes s{to{transform:rotate(360deg)}}
+  .mut{color:#9fc7a6;font-size:14px}
+  .h{display:none}
+  .ref{font-size:12px;color:#6ea377;margin-top:14px;word-break:break-all}
+</style>
+</head>
+<body>
+<div class="c">
+  <div style="font-size:40px">🌐</div>
+  <h2 id="t">Creating your WiFi account…</h2>
+  <div class="sp" id="sp"></div>
+  <p class="mut" id="msg">Please wait while we set up your account…</p>
+  <div id="creds" class="h">
+    <p style="margin-bottom:10px">✅ Payment received</p>
+    <div class="lbl">Username</div><div class="cred" id="u" onclick="copy('u')">---</div>
+    <div class="lbl">Password</div><div class="cred" id="p" onclick="copy('p')">---</div>
+    <div class="lbl">Plan</div><div class="cred" id="pl">---</div>
+    <div class="lbl">Expires</div><div class="cred" id="ex">---</div>
+    <button class="b" onclick="go()">🚀 Auto-Login</button>
+  </div>
+  <div id="err" class="h"><p class="mut">Still processing.</p><button class="b" onclick="poll()">Check again</button></div>
+  <p class="ref" id="ref"></p>
+</div>
+<script>
+const API='https://pvslxeakzyhxfzlqakqg.supabase.co/functions/v1/hotspot';
+const ref=new URLSearchParams(location.search).get('reference')||new URLSearchParams(location.search).get('trxref')||'';
+let c=0,creds={};
+document.getElementById('ref').textContent='Reference: '+ref;
+function show(id){document.getElementById(id).className='h';document.getElementById(id).classList.remove('h');}
+function hide(id){document.getElementById(id).className='h';}
+function copy(id){const t=document.getElementById(id).textContent;navigator.clipboard&&navigator.clipboard.writeText(t);}
+async function poll(){
+  c++;
+  try{
+    const r=await fetch(API+'/api/check-status?ref='+encodeURIComponent(ref));
+    const d=await r.json();
+    if(d.ready&&d.username){
+      creds=d;
+      document.getElementById('u').textContent=d.username;
+      document.getElementById('p').textContent=d.password;
+      document.getElementById('pl').textContent=d.plan||'';
+      document.getElementById('ex').textContent=d.expires_at?new Date(d.expires_at).toLocaleString():'';
+      document.getElementById('t').textContent='Your credentials';
+      document.getElementById('sp').style.display='none';
+      hide('msg');show('creds');
+      setTimeout(go,4000);
+      return;
+    }
+    if(d&&d.message)document.getElementById('msg').textContent=d.message;
+  }catch(e){}
+  if(c>=60){ document.getElementById('msg').textContent='Still processing — tap Check again in a moment.'; show('err'); return; }
+  setTimeout(poll,5000);
+}
+function go(){location.href='http://192.168.88.1/login?username='+encodeURIComponent(creds.username||'')+'&password='+encodeURIComponent(creds.password||'')+'&auto=1';}
+poll();
+</script>
+</body>
+</html>

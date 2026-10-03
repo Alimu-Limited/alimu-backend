@@ -36,6 +36,10 @@ import { handleAdmin } from "../_shared/admin.ts";
 const PUBLIC_BASE = Deno.env.get("PUBLIC_BASE_URL") ||
   "https://pvslxeakzyhxfzlqakqg.supabase.co/functions/v1/hotspot";
 
+// Success page is served from GitHub Pages because Supabase's gateway forces
+// Content-Type: text/plain on function responses (raw HTML instead of a page).
+const SUCCESS_PAGE = Deno.env.get("SUCCESS_PAGE_URL") || "https://dev.dreamhatcher.ink/success.html";
+
 const planConfig: Record<string, { amount: number; code: string; duration: string; label: string }> = {
   daily: { amount: 300, code: "24hr", duration: "24 Hours", label: "Daily" },
   "3day": { amount: 1000, code: "3d", duration: "3 Days", label: "3-Day" },
@@ -544,11 +548,11 @@ serve(async (req: Request) => {
 
     if (path === "/squad-callback" && method === "GET") {
       const ref = queryParams(req).get("transaction_ref") || queryParams(req).get("reference") || "";
-      return new Response(null, { status: 302, headers: { Location: `${PUBLIC_BASE}/success?reference=${encodeURIComponent(ref)}` } });
+      return new Response(null, { status: 302, headers: { Location: `${SUCCESS_PAGE}?reference=${encodeURIComponent(ref)}` } });
     }
     if (path === "/paystack-callback" && method === "GET") {
       const ref = queryParams(req).get("reference") || queryParams(req).get("trxref") || "";
-      return new Response(null, { status: 302, headers: { Location: `${PUBLIC_BASE}/success?reference=${encodeURIComponent(ref)}` } });
+      return new Response(null, { status: 302, headers: { Location: `${SUCCESS_PAGE}?reference=${encodeURIComponent(ref)}` } });
     }
 
     // ---- status / creds ----
