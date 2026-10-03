@@ -277,20 +277,20 @@ async function loadStats(){
   let sessions=0;
   try{const l=await api('/admin/api/sessions?sessionId='+sid);if(l.success)sessions=l.active;}catch(e){}
   const cards=[
-    {k:'Lifetime Revenue',v:money(s.revenue_lifetime),ic:'fa-money-bill-trend-up',c:'var(--gold)',bg:'var(--gold-soft)',tag:'Lifetime',click:'openRevenue()'},
-    {k:'Total Clients',v:s.total_users,ic:'fa-users',c:'var(--cyan)',bg:'var(--cyan-bg)',tag:'All time'},
-    {k:'Active',v:s.processed,ic:'fa-wifi',c:'var(--accent)',bg:'var(--accent-soft)',tag:'Online'},
-    {k:'Expired',v:s.expired,ic:'fa-user-clock',c:'var(--danger)',bg:'var(--danger-bg)',tag:'Ended'},
-    {k:'Today',v:money(s.revenue_today),ic:'fa-calendar-day',c:'var(--purple)',bg:'var(--purple-bg)',tag:'Today'},
-    {k:'This Week',v:money(s.revenue_week),ic:'fa-calendar-week',c:'var(--warning)',bg:'var(--warning-bg)',tag:'7 days'},
-    {k:'This Month',v:money(s.revenue_month),ic:'fa-calendar-days',c:'var(--accent)',bg:'var(--accent-soft)',tag:'30 days'},
-    {k:'Active Admin Sessions',v:sessions,ic:'fa-user-shield',c:'var(--purple)',bg:'var(--purple-bg)',tag:'Sessions',click:'showSessions()'}
+    {v:money(s.revenue_lifetime),label:'Total Revenue Generated',ic:'fa-money-bill-trend-up',c:'var(--gold)',bg:'var(--gold-soft)',tag:'Lifetime',currency:true,click:'openRevenue()',footer:'<i class="fa-solid fa-chart-line"></i> Click for detailed analytics'},
+    {v:money(s.revenue_today),label:"Today's Revenue",ic:'fa-calendar-day',c:'var(--cyan)',bg:'var(--cyan-bg)',tag:'TODAY',currency:true,footer:`<i class="fa-solid fa-user-plus"></i> ${s.signups_today} signups today`},
+    {v:s.processed,label:'Currently Active Users',ic:'fa-users',c:'var(--success)',bg:'var(--success-bg)',tag:'ACTIVE',footer:`<span style="color:var(--danger)"><i class="fa-solid fa-xmark"></i> ${s.expired} expired</span><span style="color:var(--warning);margin-left:12px"><i class="fa-solid fa-clock"></i> ${s.pending} pending</span>`},
+    {v:sessions,label:'Active Admin Sessions',ic:'fa-user-shield',c:'var(--purple)',bg:'var(--purple-bg)',tag:'SESSIONS',click:'showSessions()'},
+    {v:money(s.revenue_week),label:'This Week',ic:'fa-calendar-week',c:'var(--warning)',bg:'var(--warning-bg)',tag:'7 days',currency:true},
+    {v:money(s.revenue_month),label:'This Month',ic:'fa-calendar-days',c:'var(--accent)',bg:'var(--accent-soft)',tag:'30 days',currency:true},
+    {v:s.total_users,label:'Total Clients',ic:'fa-address-book',c:'var(--cyan)',bg:'var(--cyan-bg)',tag:'All time'}
   ];
   $('stats').innerHTML=cards.map(c=>`<div class="metric" ${c.click?`onclick="${c.click}"`:''}>
     <div class="metric-header"><div class="metric-icon" style="background:${c.bg};color:${c.c}"><i class="fa-solid ${c.ic}"></i></div>
     <span class="metric-tag" style="background:${c.bg};color:${c.c}">${c.tag}</span></div>
-    <div class="metric-value ${c.k.includes('Revenue')||c.k==='Today'||c.k==='This Week'||c.k==='This Month'?'currency':''}">${c.v}</div>
-    <div class="metric-label">${c.k}</div></div>`).join('');
+    <div class="metric-value ${c.currency?'currency':''}" ${c.currency?'':`style="color:${c.c}"`}>${c.v}</div>
+    <div class="metric-label">${c.label}</div>
+    ${c.footer?`<div class="metric-footer">${c.footer}</div>`:''}</div>`).join('');
 }
 function setFilter(f){filter=f;document.querySelectorAll('.filter-tab').forEach(t=>t.classList.toggle('active',t.dataset.f===f));loadUsers(1);}
 async function loadUsers(p){
