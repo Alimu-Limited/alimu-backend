@@ -36,9 +36,11 @@ import { handleAdmin } from "../_shared/admin.ts";
 const PUBLIC_BASE = Deno.env.get("PUBLIC_BASE_URL") ||
   "https://pvslxeakzyhxfzlqakqg.supabase.co/functions/v1/hotspot";
 
-// Success page is served from GitHub Pages because Supabase's gateway forces
-// Content-Type: text/plain on function responses (raw HTML instead of a page).
-const SUCCESS_PAGE = Deno.env.get("SUCCESS_PAGE_URL") || "https://dev.dreamhatcher.ink/success.html";
+// After payment, send the CUSTOMER back to the router's own hotspot portal
+// (neutral URL). The portal already shows their credentials via /api/check-mac.
+// (Do NOT send customers to the admin domain, and Supabase forces text/plain
+// on function HTML, so we don't serve the page from the function either.)
+const SUCCESS_PAGE = Deno.env.get("SUCCESS_PAGE_URL") || "http://192.168.88.1/login";
 
 const planConfig: Record<string, { amount: number; code: string; duration: string; label: string }> = {
   daily: { amount: 300, code: "24hr", duration: "24 Hours", label: "Daily" },
