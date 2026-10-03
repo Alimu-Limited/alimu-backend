@@ -223,7 +223,7 @@
 <div class="modal-overlay" id="sessionsModal">
   <div class="modal-box" style="max-width:720px">
     <div class="modal-header"><h3 class="modal-title"><i class="fa-solid fa-user-shield"></i> Admin Logins</h3><button class="modal-close" onclick="closeModal('sessionsModal')">&times;</button></div>
-    <div class="modal-body"><div class="table-wrap"><table><thead><tr><th>Admin</th><th>Role</th><th>IP</th><th>Login</th><th>Active</th></tr></thead><tbody id="logs"></tbody></table></div></div>
+    <div class="modal-body"><div class="table-wrap"><table><thead><tr><th>Admin User</th><th>IP Address</th><th>Login Time</th><th>Idle Time</th></tr></thead><tbody id="logs"></tbody></table></div></div>
     <div class="modal-footer"><button class="btn btn-danger" onclick="forceLogout()"><i class="fa-solid fa-power-off"></i> Logout all other sessions</button><button class="btn" onclick="closeModal('sessionsModal')">Close</button></div>
   </div>
 </div>
@@ -275,7 +275,7 @@ setInterval(tick,1000);tick();
 async function loadStats(){
   const d=await api('/admin/api/stats?sessionId='+sid);if(!d.success)return;const s=d.data;
   let sessions=0;
-  try{const l=await api('/admin/api/logs?sessionId='+sid);if(l.success){const now=Date.now();sessions=l.data.filter(r=>r.is_active&&(now-new Date(r.last_activity).getTime())<300000).length;}}catch(e){}
+  try{const l=await api('/admin/api/sessions?sessionId='+sid);if(l.success)sessions=l.active;}catch(e){}
   const cards=[
     {k:'Lifetime Revenue',v:money(s.revenue_lifetime),ic:'fa-money-bill-trend-up',c:'var(--gold)',bg:'var(--gold-soft)',tag:'Lifetime',click:'openRevenue()'},
     {k:'Total Clients',v:s.total_users,ic:'fa-users',c:'var(--cyan)',bg:'var(--cyan-bg)',tag:'All time'},
@@ -319,7 +319,23 @@ async function doExtend(){const plan=document.querySelector('input[name=extPlan]
 async function del(id){if(!confirm('Delete client '+id+' permanently?'))return;const d=await api('/admin/api/action',{method:'POST',body:JSON.stringify({sessionId:sid,action:'delete',userId:id})});toast(d.message||d.error);loadUsers(page);loadStats();}
 function openRevenue(){if(!$('rMonth').value)$('rMonth').value=new Date().toISOString().slice(0,7);openModal('revenueModal');loadDaily();}
 async function loadDaily(){const m=$('rMonth').value;if(!m)return;const d=await api('/admin/api/daily?sessionId='+sid+'&month='+m);if(!d.success)return;$('daily').innerHTML=d.data.map(r=>`<tr><td>${r.day}</td><td style="text-align:right">${r.signups_count}</td><td style="text-align:right;color:var(--gold)">${money(r.daily_total)}</td></tr>`).join('')||'<tr><td colspan="3" style="text-align:center;padding:24px;color:var(--text-muted)">No data</td></tr>';}
-async function showSessions(){const d=await api('/admin/api/logs?sessionId='+sid);if(!d.success)return;$('logs').innerHTML=d.data.map(r=>`<tr><td>${r.username}</td><td>${r.role}</td><td class="mono" style="font-size:12px">${r.admin_ip}</td><td class="user-email">${r.login_time?new Date(r.login_time).toLocaleString():''}</td><td>${r.is_active?'<span class="badge badge-processed">ACTIVE</span>':'—'}</td></tr>`).join('');openModal('sessionsModal');}
+function fmtIdle(s){s=Math.max(0,Number(s)||0);const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;return h?`${h}h ${m}m idle`:`${m}m ${sec}s idle`;}
+async function showSessions(){
+  const d=await api('/admin/api/sessions?sessionId='+sid);if(!d.success)return;
+  $('logs').innerHTML=d.data.map(r=>{
+    const roleLabel=r.role==='super_admin'?'SUPER ADMIN':'ADMIN';
+    const you=r.is_current?' <span style="color:var(--accent);font-weight:700">(You)</span>':'';
+    if(!r.has_session) return `<tr><td><strong>${r.username}</strong>${you}<div class="user-email">${roleLabel}</div></td><td colspan="3" style="color:var(--text-muted);padding:16px 24px">Never logged in</td></tr>`;
+    const idleCls=r.idle_seconds<300?'var(--accent)':'var(--text-secondary)';
+    return `<tr>
+      <td><strong>${r.username}</strong>${you}<div class="user-email">${roleLabel}</div></td>
+      <td class="mono" style="font-size:12px;color:var(--text-secondary)">${r.ip||'—'}</td>
+      <td class="user-email">${r.login_time?new Date(r.login_time).toLocaleString():'—'}</td>
+      <td style="color:${idleCls};font-weight:600">${fmtIdle(r.idle_seconds)}</td>
+    </tr>`;
+  }).join('');
+  openModal('sessionsModal');
+}
 async function forceLogout(){if(!confirm('Log out all other admin sessions?'))return;const d=await api('/admin/api/force-logout',{method:'POST',body:JSON.stringify({sessionId:sid})});toast(d.message||d.error);closeModal('sessionsModal');}
 async function loadProvider(){const d=await api('/admin/api/provider?sessionId='+sid);if(d.success){$('provider').value=d.provider;$('provLabel').textContent=d.provider.charAt(0).toUpperCase()+d.provider.slice(1);}}
 function openProvider(){$('providerModal').classList.add('open');}

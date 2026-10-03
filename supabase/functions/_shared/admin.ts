@@ -156,6 +156,27 @@ export async function handleAdmin(req: Request, path: string): Promise<Response>
     return json({ error: "Unknown action" }, 400);
   }
 
+  if (path === "/admin/api/sessions" && method === "GET") {
+    const cfg = adminUsers();
+    const out: Array<Record<string, unknown>> = [];
+    for (const [username, c] of Object.entries(cfg)) {
+      const { data } = await getSupabase().from("admin_logs")
+        .select("*").eq("username", username).order("login_time", { ascending: false }).limit(1);
+      const row = data?.[0];
+      if (!row) {
+        out.push({ username, role: c.role, has_session: false, is_current: false, is_active: false });
+        continue;
+      }
+      const idle = Math.max(0, Math.floor((Date.now() - new Date(row.last_activity).getTime()) / 1000));
+      out.push({
+        username, role: c.role, ip: row.admin_ip, login_time: row.login_time,
+        last_activity: row.last_activity, idle_seconds: idle,
+        is_active: row.is_active, is_current: row.session_id === sessionId, has_session: true,
+      });
+    }
+    return json({ success: true, data: out, active: out.filter((x) => x.is_active).length });
+  }
+
   if (path === "/admin/api/logs" && method === "GET") {
     const { data, error } = await getSupabase().from("admin_logs")
       .select("username, role, admin_ip, login_time, last_activity, is_active")
