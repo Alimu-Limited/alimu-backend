@@ -1,0 +1,48 @@
+name: Deploy Edge Functions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/**'
+      - 'supabase/config.toml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Verify SUPABASE_ACCESS_TOKEN secret
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        if: env.SUPABASE_ACCESS_TOKEN == ''
+        run: |
+          echo "::error::SUPABASE_ACCESS_TOKEN secret is missing. Add it in Settings -> Secrets and variables -> Actions."
+          exit 1
+
+      - name: Write functions env from GitHub secrets
+        run: |
+          cat > /tmp/functions.env <<'EOF'
+          MIKROTIK_API_KEY=${{ secrets.MIKROTIK_API_KEY }}
+          PAYMENT_PROVIDER=${{ secrets.PAYMENT_PROVIDER }}
+          SQUAD_SECRET_KEY=${{ secrets.SQUAD_SECRET_KEY }}
+          SQUAD_BASE_URL=${{ secrets.SQUAD_BASE_URL }}
+          PAYSTACK_SECRET_KEY=${{ secrets.PAYSTACK_SECRET_KEY }}
+          PUBLIC_BASE_URL=${{ secrets.PUBLIC_BASE_URL }}
+          EOF
+
+      - name: Set secrets on Supabase
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase secrets set --env-file /tmp/functions.env --project-ref pvslxeakzyhxfzlqakqg
+
+      - name: Deploy functions
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase functions deploy hotspot --project-ref pvslxeakzyhxfzlqakqg --use-api
