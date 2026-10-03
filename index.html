@@ -274,6 +274,8 @@ function tick(){const d=new Date();$('clock').textContent='Server Time: '+d.toLo
 setInterval(tick,1000);tick();
 async function loadStats(){
   const d=await api('/admin/api/stats?sessionId='+sid);if(!d.success)return;const s=d.data;
+  let sessions=0;
+  try{const l=await api('/admin/api/logs?sessionId='+sid);if(l.success){const now=Date.now();sessions=l.data.filter(r=>r.is_active&&(now-new Date(r.last_activity).getTime())<300000).length;}}catch(e){}
   const cards=[
     {k:'Lifetime Revenue',v:money(s.revenue_lifetime),ic:'fa-money-bill-trend-up',c:'var(--gold)',bg:'var(--gold-soft)',tag:'Lifetime',click:'openRevenue()'},
     {k:'Total Clients',v:s.total_users,ic:'fa-users',c:'var(--cyan)',bg:'var(--cyan-bg)',tag:'All time'},
@@ -282,7 +284,7 @@ async function loadStats(){
     {k:'Today',v:money(s.revenue_today),ic:'fa-calendar-day',c:'var(--purple)',bg:'var(--purple-bg)',tag:'Today'},
     {k:'This Week',v:money(s.revenue_week),ic:'fa-calendar-week',c:'var(--warning)',bg:'var(--warning-bg)',tag:'7 days'},
     {k:'This Month',v:money(s.revenue_month),ic:'fa-calendar-days',c:'var(--accent)',bg:'var(--accent-soft)',tag:'30 days'},
-    {k:'Pending',v:s.pending,ic:'fa-hourglass-half',c:'var(--warning)',bg:'var(--warning-bg)',tag:'Queue'}
+    {k:'Active Admin Sessions',v:sessions,ic:'fa-user-shield',c:'var(--purple)',bg:'var(--purple-bg)',tag:'Sessions',click:'showSessions()'}
   ];
   $('stats').innerHTML=cards.map(c=>`<div class="metric" ${c.click?`onclick="${c.click}"`:''}>
     <div class="metric-header"><div class="metric-icon" style="background:${c.bg};color:${c.c}"><i class="fa-solid ${c.ic}"></i></div>
