@@ -483,7 +483,7 @@ serve(async (req: Request) => {
         return json({ success: true, checkout_url: checkoutUrl, payment_reference: paymentReference });
       } catch (e) {
         console.error("initialize error", e);
-        return json({ error: String((e as Error)?.message || e) }, 500);
+        return json({ error: "Failed to initialize payment" }, 500);
       }
     }
 
