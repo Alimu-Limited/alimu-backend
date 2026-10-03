@@ -105,6 +105,12 @@ export async function handleAdmin(req: Request, path: string): Promise<Response>
     return json({ success: true, data, month });
   }
 
+  if (path === "/admin/api/monthly" && method === "GET") {
+    const { data, error } = await getSupabase().rpc("admin_monthly");
+    if (error) return json({ error: error.message }, 500);
+    return json({ success: true, data });
+  }
+
   if (path === "/admin/api/users" && method === "GET") {
     const page = Math.max(1, parseInt(q.get("page") || "1", 10));
     const search = (q.get("search") || "").trim();

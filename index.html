@@ -209,11 +209,14 @@
   <div class="modal-box" style="max-width:760px">
     <div class="modal-header"><h3 class="modal-title"><i class="fa-solid fa-chart-line"></i> Revenue Analytics</h3><button class="modal-close" onclick="closeModal('revenueModal')">&times;</button></div>
     <div class="modal-body">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:12px;flex-wrap:wrap">
-        <h4>Monthly Overview</h4>
-        <input id="rMonth" type="month" style="width:180px">
+      <h4 style="margin-bottom:12px">Monthly Overview</h4>
+      <div class="table-wrap" style="max-height:220px;overflow-y:auto"><table><thead><tr><th>Month</th><th style="text-align:right">Signups</th><th style="text-align:right">Revenue</th></tr></thead><tbody id="monthly"></tbody></table></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:22px 0 12px;gap:12px;flex-wrap:wrap">
+        <h4 id="dailyLabel" style="margin:0">Daily Progress</h4>
+        <button class="btn" style="padding:6px 12px;font-size:12px" onclick="returnToCurrentMonth()"><i class="fa-solid fa-arrow-left"></i> Return to Current Month</button>
       </div>
-      <div class="table-wrap" style="max-height:420px;overflow-y:auto"><table><thead><tr><th>Day</th><th style="text-align:right">Signups</th><th style="text-align:right">Revenue</th></tr></thead><tbody id="daily"></tbody></table></div>
+      <div class="table-wrap" style="max-height:300px;overflow-y:auto"><table><thead><tr><th>Day</th><th style="text-align:right">Signups</th><th style="text-align:right">Revenue</th></tr></thead><tbody id="daily"></tbody></table></div>
+      <p style="margin-top:16px;font-size:13px;color:var(--text-secondary);text-align:center"><i class="fa-solid fa-info-circle"></i> Click a month to view its daily revenue &amp; signups</p>
     </div>
     <div class="modal-footer"><button class="btn" onclick="closeModal('revenueModal')">Close</button></div>
   </div>
@@ -248,6 +251,10 @@ const money=n=>'₦'+(Number(n)||0).toLocaleString('en-NG');
 function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',2600);}
 function openModal(id){$(id).classList.add('open');}
 function closeModal(id){$(id).classList.remove('open');}
+function setRole(username,role){$('who').textContent=username;const c=$('roleChip');c.textContent=role==='super_admin'?'SUPER ADMIN':'ADMIN';c.style.background=role==='super_admin'?'var(--gold-soft)':'var(--accent-soft)';c.style.color=role==='super_admin'?'var(--gold)':'var(--accent)';}
+let idleTimer=null;
+function resetIdle(){clearTimeout(idleTimer);idleTimer=setTimeout(()=>{if(sid){toast('Logged out after 5 minutes of inactivity');logout();}},5*60*1000);}
+['mousemove','keydown','click','scroll','touchstart'].forEach(e=>document.addEventListener(e,resetIdle,true));
 async function api(path,opts={}){
   const r=await fetch(API+path,{headers:{'Content-Type':'application/json'},...opts});
   const d=await r.json().catch(()=>({}));
@@ -260,11 +267,8 @@ async function login(){
     const d=await api('/admin/api/login',{method:'POST',body:JSON.stringify({username:$('u').value,password:$('p').value})});
     if(!d.success){$('loginErr').textContent=d.error||'Login failed';return;}
     sid=d.sessionId;localStorage.setItem('dh_sid',sid);
-    $('who').textContent=d.username;
-    $('roleChip').textContent=d.role==='super_admin'?'SUPER ADMIN':'ADMIN';
-    $('roleChip').style.background=d.role==='super_admin'?'var(--gold-soft)':'var(--accent-soft)';
-    $('roleChip').style.color=d.role==='super_admin'?'var(--gold)':'var(--accent)';
-    showApp();loadAll();
+    setRole(d.username,d.role);
+    showApp();loadAll();resetIdle();
   }catch(e){$('loginErr').textContent=e.message;}
 }
 function logout(){sid='';localStorage.removeItem('dh_sid');$('app').classList.add('hidden');$('login').classList.remove('hidden');}
@@ -317,8 +321,20 @@ function openExtend(id,name){extId=id;$('extendUser').textContent=name;$('extend
 function pickPlan(el,code){document.querySelectorAll('.plan-option').forEach(x=>x.classList.remove('selected'));el.classList.add('selected');el.querySelector('input').checked=true;}
 async function doExtend(){const plan=document.querySelector('input[name=extPlan]:checked').value;const d=await api('/admin/api/action',{method:'POST',body:JSON.stringify({sessionId:sid,action:'extend',userId:extId,newPlan:plan})});toast(d.message||d.error);closeModal('extendModal');loadUsers(page);loadStats();}
 async function del(id){if(!confirm('Delete client '+id+' permanently?'))return;const d=await api('/admin/api/action',{method:'POST',body:JSON.stringify({sessionId:sid,action:'delete',userId:id})});toast(d.message||d.error);loadUsers(page);loadStats();}
-function openRevenue(){if(!$('rMonth').value)$('rMonth').value=new Date().toISOString().slice(0,7);openModal('revenueModal');loadDaily();}
-async function loadDaily(){const m=$('rMonth').value;if(!m)return;const d=await api('/admin/api/daily?sessionId='+sid+'&month='+m);if(!d.success)return;$('daily').innerHTML=d.data.map(r=>`<tr><td>${r.day}</td><td style="text-align:right">${r.signups_count}</td><td style="text-align:right;color:var(--gold)">${money(r.daily_total)}</td></tr>`).join('')||'<tr><td colspan="3" style="text-align:center;padding:24px;color:var(--text-muted)">No data</td></tr>';}
+function openRevenue(){openModal('revenueModal');loadMonthly();}
+async function loadMonthly(){
+  const d=await api('/admin/api/monthly?sessionId='+sid);if(!d.success)return;
+  const rows=d.data||[];
+  $('monthly').innerHTML=rows.length?rows.map(r=>`<tr style="cursor:pointer" onclick="selectMonth('${r.month}')"><td>${r.month}</td><td style="text-align:right">${r.signups}</td><td style="text-align:right;color:var(--gold)">${money(r.revenue)}</td></tr>`).join(''):'<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text-muted)">No revenue yet</td></tr>';
+  returnToCurrentMonth();
+}
+function returnToCurrentMonth(){selectMonth(new Date().toISOString().slice(0,7));}
+async function selectMonth(m){
+  $('dailyLabel').textContent='Daily Progress — '+m;
+  const d=await api('/admin/api/daily?sessionId='+sid+'&month='+m);if(!d.success)return;
+  const rows=d.data||[];
+  $('daily').innerHTML=rows.length?rows.map(r=>`<tr><td>${r.day}</td><td style="text-align:right">${r.signups_count}</td><td style="text-align:right;color:var(--gold)">${money(r.daily_total)}</td></tr>`).join(''):'<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text-muted)">No data</td></tr>';
+}
 function fmtIdle(s){s=Math.max(0,Number(s)||0);const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;return h?`${h}h ${m}m idle`:`${m}m ${sec}s idle`;}
 async function showSessions(){
   const d=await api('/admin/api/sessions?sessionId='+sid);if(!d.success)return;
@@ -342,7 +358,11 @@ function openProvider(){$('providerModal').classList.add('open');}
 async function saveProvider(){const d=await api('/admin/api/provider',{method:'POST',body:JSON.stringify({sessionId:sid,provider:$('provider').value})});toast(d.success?('Provider: '+d.provider):(d.error||''));closeModal('providerModal');loadProvider();}
 // add a sessions shortcut into the Refresh area: click on "Network Live"
 document.querySelector('.chip')?.addEventListener('click',showSessions);
-if(sid){showApp();loadAll();}
+async function restore(){
+  try{ const me=await api('/admin/api/me?sessionId='+sid); if(!me||!me.username){logout();return;} setRole(me.username,me.role); showApp(); loadAll(); resetIdle(); }
+  catch(e){ logout(); }
+}
+if(sid){ restore(); }
 </script>
 </body>
 </html>
