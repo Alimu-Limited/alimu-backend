@@ -1,0 +1,14 @@
+project_id = "pvslxeakzyhxfzlqakqg"
+
+[api]
+enabled = true
+
+[auth]
+enabled = true
+
+# Hotspot backend: all routes are public (the router authenticates the
+# mikrotik endpoints with the x-api-key header; payment webhooks are verified
+# by provider HMAC signatures). Mirrors the old Express server, which had no
+# gateway-level auth.
+[functions.hotspot]
+verify_jwt = false

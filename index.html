@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>London Admin — Hotspot</title>
+<style>
+  :root{--bg:#0b1020;--card:#141c3a;--elev:#1b2550;--txt:#eaf0ff;--mut:#8ea0c9;--acc:#00c9ff;--ok:#22c55e;--warn:#f59e0b;--bad:#ef4444;--bd:#243260}
+  *{box-sizing:border-box} body{margin:0;font-family:'Segoe UI',system-ui,Arial;background:var(--bg);color:var(--txt)}
+  a{color:var(--acc)} .wrap{max-width:1100px;margin:0 auto;padding:20px}
+  .card{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:20px;margin-bottom:16px}
+  input,select,button{font:inherit} input,select{background:var(--elev);border:1px solid var(--bd);color:var(--txt);padding:10px 12px;border-radius:10px;width:100%}
+  button{background:linear-gradient(135deg,var(--acc),#92fe9d);color:#04121f;border:none;padding:10px 18px;border-radius:10px;font-weight:700;cursor:pointer}
+  button.sec{background:var(--elev);color:var(--txt);border:1px solid var(--bd)}
+  button.danger{background:var(--bad);color:#fff}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+  .stat{background:var(--elev);border-radius:12px;padding:16px}
+  .stat b{display:block;font-size:24px;margin-top:6px}
+  .mut{color:var(--mut);font-size:13px}
+  table{width:100%;border-collapse:collapse;font-size:14px} th,td{text-align:left;padding:8px;border-bottom:1px solid var(--bd)}
+  th{color:var(--mut);font-weight:600}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .tabs{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+  .tab{padding:8px 14px;border-radius:999px;background:var(--elev);cursor:pointer;border:1px solid var(--bd)}
+  .tab.active{background:var(--acc);color:#04121f;font-weight:700}
+  .hidden{display:none}
+  .pill{padding:2px 8px;border-radius:999px;font-size:12px}
+  .p-processed{background:rgba(34,197,94,.2);color:#7ee2a8}.p-pending{background:rgba(245,158,11,.2);color:#ffd58a}.p-expired{background:rgba(239,68,68,.2);color:#ff9d9d}
+  .toast{position:fixed;bottom:20px;right:20px;background:var(--elev);border:1px solid var(--bd);padding:12px 16px;border-radius:10px;display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="login" class="card" style="max-width:380px;margin:60px auto">
+    <h2>🔐 London Admin</h2>
+    <p class="mut">Hotspot control panel</p>
+    <div style="margin:12px 0"><input id="u" placeholder="Username"></div>
+    <div style="margin:12px 0"><input id="p" type="password" placeholder="Password"></div>
+    <button style="width:100%" onclick="login()">Sign in</button>
+    <p id="loginErr" class="mut" style="color:var(--bad)"></p>
+  </div>
+
+  <div id="app" class="hidden">
+    <div class="row" style="justify-content:space-between;margin-bottom:16px">
+      <h2 style="margin:0">🛜 London Hotspot Admin</h2>
+      <div class="row"><span id="who" class="mut"></span><button class="sec" onclick="logout()">Logout</button></div>
+    </div>
+
+    <div class="grid" id="stats"></div>
+
+    <div class="tabs" style="margin-top:16px">
+      <div class="tab active" data-t="users" onclick="tab('users')">Users</div>
+      <div class="tab" data-t="revenue" onclick="tab('revenue')">Revenue</div>
+      <div class="tab" data-t="logs" onclick="tab('logs')">Logins</div>
+      <div class="tab" data-t="settings" onclick="tab('settings')">Settings</div>
+    </div>
+
+    <div id="t-users" class="card">
+      <div class="row" style="justify-content:space-between">
+        <div class="row"><input id="search" placeholder="Search username / mac / email" style="width:280px"><button class="sec" onclick="loadUsers(1)">Search</button></div>
+        <span id="userCount" class="mut"></span>
+      </div>
+      <table style="margin-top:12px"><thead><tr><th>Username</th><th>Password</th><th>Plan</th><th>Status</th><th>MAC</th><th>Expires</th><th></th></tr></thead><tbody id="users"></tbody></table>
+      <div class="row" style="margin-top:12px"><button class="sec" onclick="loadUsers(page-1)">◀ Prev</button><span id="pageInfo" class="mut"></span><button class="sec" onclick="loadUsers(page+1)">Next ▶</button></div>
+    </div>
+
+    <div id="t-revenue" class="card hidden">
+      <div class="row"><input id="month" type="month" style="width:180px"><button class="sec" onclick="loadDaily()">Load</button></div>
+      <table style="margin-top:12px"><thead><tr><th>Day</th><th>Signups</th><th>Revenue</th></tr></thead><tbody id="daily"></tbody></table>
+    </div>
+
+    <div id="t-logs" class="card hidden">
+      <table><thead><tr><th>User</th><th>Role</th><th>IP</th><th>Login</th><th>Last activity</th><th>Active</th></tr></thead><tbody id="logs"></tbody></table>
+    </div>
+
+    <div id="t-settings" class="card hidden">
+      <h3>Payment provider</h3>
+      <div class="row"><select id="provider" style="width:200px"><option value="squad">Squad</option><option value="paystack">Paystack</option></select><button onclick="setProvider()">Save</button></div>
+      <h3 style="margin-top:20px">Sessions</h3>
+      <button class="danger" onclick="forceLogout()">Log out all other sessions</button>
+    </div>
+  </div>
+</div>
+<div id="toast" class="toast"></div>
+
+<script>
+const API = 'https://pvslxeakzyhxfzlqakqg.supabase.co/functions/v1/hotspot';
+let sid = localStorage.getItem('london_admin_sid') || '';
+let page = 1;
+const $ = (id) => document.getElementById(id);
+function toast(m){ const t=$('toast'); t.textContent=m; t.style.display='block'; setTimeout(()=>t.style.display='none',2500); }
+function money(n){ return '₦'+(Number(n)||0).toLocaleString('en-NG'); }
+async function api(path, opts={}){
+  const r = await fetch(API+path, { headers:{'Content-Type':'application/json'}, ...opts });
+  const d = await r.json().catch(()=>({}));
+  if (r.status===401){ logout(); throw new Error('Session expired'); }
+  return d;
+}
+async function login(){
+  $('loginErr').textContent='';
+  try{
+    const d = await api('/admin/api/login',{method:'POST',body:JSON.stringify({username:$('u').value,password:$('p').value})});
+    if(!d.success){ $('loginErr').textContent=d.error||'Login failed'; return; }
+    sid=d.sessionId; localStorage.setItem('london_admin_sid',sid); $('who').textContent=d.username+' ('+d.role+')';
+    showApp(); loadStats(); loadUsers(1);
+  }catch(e){ $('loginErr').textContent=e.message; }
+}
+function logout(){ sid=''; localStorage.removeItem('london_admin_sid'); $('app').classList.add('hidden'); $('login').classList.remove('hidden'); }
+function showApp(){ $('login').classList.add('hidden'); $('app').classList.remove('hidden'); }
+async function loadStats(){
+  const d = await api('/admin/api/stats?sessionId='+sid);
+  if(!d.success){return;}
+  const s=d.data;
+  $('stats').innerHTML = [
+    ['Total users',s.total_users],['Active',s.processed],['Pending',s.pending],['Expired',s.expired],
+    ['Revenue today',money(s.revenue_today)],['This week',money(s.revenue_week)],['This month',money(s.revenue_month)],['Lifetime',money(s.revenue_lifetime)]
+  ].map(([k,v])=>`<div class="stat"><span class="mut">${k}</span><b>${v}</b></div>`).join('');
+}
+async function loadUsers(p){
+  if(p<1) p=1; page=p;
+  const d = await api(`/admin/api/users?sessionId=${sid}&page=${p}&search=${encodeURIComponent($('search').value)}`);
+  if(!d.success) return;
+  $('userCount').textContent = d.total+' total';
+  $('pageInfo').textContent = 'Page '+d.page;
+  $('users').innerHTML = d.data.map(u=>`<tr>
+    <td>${u.mikrotik_username||''}</td><td>${u.mikrotik_password||''}</td><td>${u.plan||''}</td>
+    <td><span class="pill p-${u.status}">${u.status}</span></td><td class="mut">${u.mac_address||''}</td>
+    <td class="mut">${u.expires_at?new Date(u.expires_at).toLocaleString():''}</td>
+    <td><button class="sec" onclick="extend(${u.id})">Extend</button> <button class="danger" onclick="del(${u.id})">Del</button></td></tr>`).join('') || '<tr><td colspan="7" class="mut">No users</td></tr>';
+}
+async function del(id){ if(!confirm('Delete user '+id+'?'))return; const d=await api('/admin/api/action',{method:'POST',body:JSON.stringify({sessionId:sid,action:'delete',userId:id})}); toast(d.message||d.error); loadUsers(page); loadStats(); }
+async function extend(id){ const plan=prompt('Extend plan: 24hr, 3d, 5d, 7d, 14d, 30d','24hr'); if(!plan)return; const d=await api('/admin/api/action',{method:'POST',body:JSON.stringify({sessionId:sid,action:'extend',userId:id,newPlan:plan})}); toast(d.message||d.error); loadUsers(page); }
+async function loadDaily(){ const m=$('month').value; if(!m)return; const d=await api('/admin/api/daily?sessionId='+sid+'&month='+m); if(!d.success)return; $('daily').innerHTML=d.data.map(r=>`<tr><td>${r.day}</td><td>${r.signups_count}</td><td>${money(r.daily_total)}</td></tr>`).join('')||'<tr><td colspan="3" class="mut">No data</td></tr>'; }
+async function loadLogs(){ const d=await api('/admin/api/logs?sessionId='+sid); if(!d.success)return; $('logs').innerHTML=d.data.map(r=>`<tr><td>${r.username}</td><td>${r.role}</td><td class="mut">${r.admin_ip}</td><td class="mut">${r.login_time?new Date(r.login_time).toLocaleString():''}</td><td class="mut">${r.last_activity?new Date(r.last_activity).toLocaleString():''}</td><td>${r.is_active?'✅':'—'}</td></tr>`).join(''); }
+async function setProvider(){ const d=await api('/admin/api/provider',{method:'POST',body:JSON.stringify({sessionId:sid,provider:$('provider').value})}); toast(d.success?('Provider: '+d.provider):(d.error||'')); }
+async function forceLogout(){ if(!confirm('Log out all other sessions?'))return; const d=await api('/admin/api/force-logout',{method:'POST',body:JSON.stringify({sessionId:sid})}); toast(d.message||d.error); }
+function tab(t){
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.t===t));
+  ['users','revenue','logs','settings'].forEach(x=>$('t-'+x).classList.toggle('hidden',x!==t));
+  if(t==='logs') loadLogs();
+  if(t==='revenue'){ if(!$('month').value){$('month').value=new Date().toISOString().slice(0,7);} loadDaily(); }
+}
+if(sid){ $('who').textContent='…'; showApp(); loadStats(); loadUsers(1); }
+</script>
+</body>
+</html>
