@@ -31,13 +31,13 @@ jobs:
           cat > /tmp/functions.env <<'EOF'
           MIKROTIK_API_KEY=${{ secrets.MIKROTIK_API_KEY }}
           PAYMENT_PROVIDER=${{ secrets.PAYMENT_PROVIDER }}
-          SQUAD_SECRET_KEY=${{ secrets.SQUAD_SECRET_KEY }}
-          SQUAD_BASE_URL=${{ secrets.SQUAD_BASE_URL }}
-          PAYSTACK_SECRET_KEY=${{ secrets.PAYSTACK_SECRET_KEY }}
           ADMIN_SUPER_PASS=${{ secrets.ADMIN_SUPER_PASS }}
           ADMIN_VIEW_PASS=${{ secrets.ADMIN_VIEW_PASS }}
           PUBLIC_BASE_URL=${{ secrets.PUBLIC_BASE_URL }}
           EOF
+      # NOTE: payment provider keys (PAYSTACK_SECRET_KEY, SQUAD_SECRET_KEY,
+      # SQUAD_BASE_URL) are managed directly in the Supabase dashboard, NOT here,
+      # so a deploy can never overwrite them with empty GitHub secrets.
 
       - name: Set secrets on Supabase
         env:
