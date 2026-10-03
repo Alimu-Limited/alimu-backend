@@ -136,7 +136,10 @@ async function initPaystack(
     }),
   });
   const data = await res.json();
-  return { checkoutUrl: data?.data?.authorization_url, paymentReference: data?.data?.reference };
+  if (!res.ok || !data?.data?.authorization_url) {
+    throw new Error(`paystack init failed: ${data?.message || JSON.stringify(data)}`);
+  }
+  return { checkoutUrl: data.data.authorization_url, paymentReference: data.data.reference };
 }
 
 async function getActiveProvider(): Promise<string> {
@@ -308,6 +311,33 @@ async function checkToken(req: Request): Promise<Response> {
   });
 }
 
+async function checkMac(macRaw: string): Promise<Response> {
+  const mac = (macRaw || "").trim().toUpperCase();
+  if (!mac || mac === "UNKNOWN" || mac.length < 10) return json({ found: false });
+  const { data } = await getSupabase()
+    .from("payment_queue")
+    .select("mikrotik_username, mikrotik_password, plan, status, expires_at, transaction_id")
+    .eq("mac_address", mac)
+    .in("status", ["pending", "processed"])
+    .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  const row = data?.[0];
+  if (!row) return json({ found: false });
+  if (row.status === "pending") {
+    return json({ found: true, ready: false, message: "Account is being created, please wait..." });
+  }
+  return json({
+    found: true,
+    ready: true,
+    username: row.mikrotik_username,
+    password: row.mikrotik_password,
+    plan: row.plan,
+    expires: row.expires_at,
+    reference: row.transaction_id,
+  });
+}
+
 async function checkEmail(email: string): Promise<Response> {
   if (!email) return json({ error: "Email required" }, 400);
   const { data } = await getSupabase()
@@ -359,11 +389,11 @@ body{font-family:Arial,sans-serif;background:linear-gradient(135deg,#1a1a2e,#162
 <div id="err" class="h"><p>Still processing. <button class="b" onclick="poll()">Check again</button></p></div>
 </div>
 <script>
-const ref='${ref}';let c=0,creds={};
+const API='${PUBLIC_BASE}';const ref='${ref}';let c=0,creds={};
 async function poll(){
   c++;
   try{
-    const r=await fetch('/api/check-status?ref='+encodeURIComponent(ref));
+    const r=await fetch(API+'/api/check-status?ref='+encodeURIComponent(ref));
     const d=await r.json();
     if(d.ready){creds=d;document.getElementById('u').textContent=d.username;document.getElementById('p').textContent=d.password;
       document.getElementById('pl').textContent=d.plan;document.getElementById('ex').textContent=d.expires_at?new Date(d.expires_at).toLocaleString():'';
@@ -447,7 +477,7 @@ serve(async (req: Request) => {
         return json({ success: true, checkout_url: checkoutUrl, payment_reference: paymentReference });
       } catch (e) {
         console.error("initialize error", e);
-        return json({ error: "Failed to initialize payment" }, 500);
+        return json({ error: String((e as Error)?.message || e) }, 500);
       }
     }
 
@@ -514,11 +544,11 @@ serve(async (req: Request) => {
 
     if (path === "/squad-callback" && method === "GET") {
       const ref = queryParams(req).get("transaction_ref") || queryParams(req).get("reference") || "";
-      return new Response(null, { status: 302, headers: { Location: `/success?reference=${encodeURIComponent(ref)}` } });
+      return new Response(null, { status: 302, headers: { Location: `${PUBLIC_BASE}/success?reference=${encodeURIComponent(ref)}` } });
     }
     if (path === "/paystack-callback" && method === "GET") {
       const ref = queryParams(req).get("reference") || queryParams(req).get("trxref") || "";
-      return new Response(null, { status: 302, headers: { Location: `/success?reference=${encodeURIComponent(ref)}` } });
+      return new Response(null, { status: 302, headers: { Location: `${PUBLIC_BASE}/success?reference=${encodeURIComponent(ref)}` } });
     }
 
     // ---- status / creds ----
@@ -530,6 +560,7 @@ serve(async (req: Request) => {
     if (path === "/api/get-token" && method === "GET") return await getToken(queryParams(req).get("ref") || "");
     if (path === "/api/check-token" && method === "GET") return await checkToken(req);
     if (path === "/api/check-email" && method === "GET") return await checkEmail(queryParams(req).get("email") || "");
+    if (path === "/api/check-mac" && method === "GET") return await checkMac(queryParams(req).get("mac") || "");
 
     if (path === "/health" && method === "GET") {
       const provider = await getActiveProvider();
