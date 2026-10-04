@@ -231,7 +231,7 @@
 
 <!-- Live activity modal -->
 <div class="modal-overlay" id="activityModal">
-  <div class="modal-box" style="max-width:1500px">
+  <div class="modal-box" style="max-width:1100px">
     <div class="modal-header"><h3 class="modal-title"><i class="fa-solid fa-wave-square"></i> Live Activity</h3><button class="modal-close" onclick="closeModal('activityModal')">&times;</button></div>
     <div class="modal-body">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:12px;flex-wrap:wrap">
@@ -308,7 +308,7 @@ async function loadStats(){
   let sessions=0;
   try{const l=await api('/admin/api/sessions?sessionId='+sid);if(l.success)sessions=l.active;}catch(e){}
   let activityCount=0;
-  try{const a=await api('/admin/api/activity?sessionId='+sid+'&hours=48&limit=300');if(a.success)activityCount=a.data.length;}catch(e){}
+  try{const a=await api('/admin/api/activity?sessionId='+sid+'&hours=48&limit=500');if(a.success)activityCount=new Set((a.data||[]).filter(r=>r.ref).map(r=>r.ref)).size;}catch(e){}
   const cards=[
     {v:money(s.revenue_lifetime),label:'Total Revenue Generated',ic:'fa-money-bill-trend-up',c:'var(--gold)',bg:'var(--gold-soft)',tag:'Lifetime',currency:true,click:'openRevenue()',footer:'<i class="fa-solid fa-chart-line"></i> Click for detailed analytics'},
     {v:money(s.revenue_today),label:"Today's Revenue",ic:'fa-calendar-day',c:'var(--cyan)',bg:'var(--cyan-bg)',tag:'TODAY',currency:true,footer:`<i class="fa-solid fa-user-plus"></i> ${s.signups_today} signups today`},
@@ -385,10 +385,11 @@ async function loadActivity(){
   const hours=$('activityHours').value;
   const d=await api('/admin/api/activity?sessionId='+sid+'&hours='+hours+'&limit=300');
   if(!d.success)return;
-  const rows=d.data||[];
-  $('activityMeta').textContent=rows.length+' events · last '+hours+'h · live';
-  const cmap={payment:'var(--accent)',queue:'var(--cyan)',mikrotik:'var(--text-secondary)',callback:'var(--purple)',success:'var(--gold)',expired:'var(--warning)'};
+  const rows=(d.data||[]).slice().reverse();
+  const people=new Set(rows.filter(r=>r.ref).map(r=>r.ref)).size;
+  $('activityMeta').textContent=rows.length+' lines · '+people+' payment(s) · last '+hours+'h · live';
   $('activityFeed').innerHTML=rows.length?rows.map(r=>`<div style="padding:4px 0;border-bottom:1px dashed rgba(255,255,255,.06);white-space:nowrap"><span style="color:var(--text-muted)">${fmtT(r.created_at)} </span>${esc(r.message)}</div>`).join(''):'<div style="color:var(--text-muted)">No activity yet</div>';
+  const f=$('activityFeed');f.scrollTop=f.scrollHeight;
 }
 function fmtIdle(s){s=Math.max(0,Number(s)||0);const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;return h?`${h}h ${m}m idle`:`${m}m ${sec}s idle`;}
 async function showSessions(){
