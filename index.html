@@ -231,14 +231,14 @@
 
 <!-- Live activity modal -->
 <div class="modal-overlay" id="activityModal">
-  <div class="modal-box" style="max-width:1120px">
+  <div class="modal-box" style="max-width:1500px">
     <div class="modal-header"><h3 class="modal-title"><i class="fa-solid fa-wave-square"></i> Live Activity</h3><button class="modal-close" onclick="closeModal('activityModal')">&times;</button></div>
     <div class="modal-body">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:12px;flex-wrap:wrap">
         <span class="mut" id="activityMeta"></span>
         <div style="display:flex;align-items:center;gap:10px"><label style="margin:0">Window:</label><select id="activityHours" class="year-select" onchange="loadActivity()"><option value="24">24 hours</option><option value="48" selected>48 hours</option><option value="168">7 days</option></select><button class="btn" onclick="loadActivity()"><i class="fa-solid fa-rotate"></i></button></div>
       </div>
-      <div id="activityFeed" style="max-height:460px;overflow:auto;font-family:'JetBrains Mono',monospace;font-size:12.5px;background:var(--bg-primary);border:1px solid var(--border);border-radius:10px;padding:12px"></div>
+      <div id="activityFeed" style="max-height:66vh;overflow:auto;font-family:'JetBrains Mono',monospace;font-size:12.5px;background:var(--bg-primary);border:1px solid var(--border);border-radius:10px;padding:12px"></div>
     </div>
     <div class="modal-footer"><button class="btn" onclick="closeModal('activityModal')">Close</button></div>
   </div>
@@ -272,6 +272,8 @@ const $=id=>document.getElementById(id);
 const money=n=>'₦'+(Number(n)||0).toLocaleString('en-NG');
 function fmtDT(s){return s?new Date(s).toLocaleString('en-NG',{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:true}):'—';}
 function fmtT(s){return s?new Date(s).toLocaleTimeString('en-NG',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true}):'—';}
+const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+function monthName(ym){const p=String(ym).split('-');return (MONTHS[parseInt(p[1],10)-1]||p[1]||'')+' '+(p[0]||'');}
 function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',2600);}
 function openModal(id){$(id).classList.add('open');}
 function closeModal(id){$(id).classList.remove('open');if(id==='activityModal'&&activityTimer){clearInterval(activityTimer);activityTimer=null;}}
@@ -363,11 +365,11 @@ async function loadMonthly(){
 function filterYear(y){renderMonthly(y);}
 function renderMonthly(year){
   const rows=allMonths.filter(m=>year==='ALL'||String(m.month).startsWith(year));
-  $('monthly').innerHTML=rows.length?rows.map(m=>`<tr style="cursor:pointer" onclick="selectMonth('${m.month}')"><td>${m.month}</td><td style="text-align:right;color:var(--gold)">${money(m.revenue)}</td></tr>`).join(''):'<tr><td colspan="2" style="text-align:center;padding:20px;color:var(--text-muted)">No revenue yet</td></tr>';
+  $('monthly').innerHTML=rows.length?rows.map(m=>`<tr style="cursor:pointer" onclick="selectMonth('${m.month}')"><td>${monthName(m.month)}</td><td style="text-align:right;color:var(--gold)">${money(m.revenue)}</td></tr>`).join(''):'<tr><td colspan="2" style="text-align:center;padding:20px;color:var(--text-muted)">No revenue yet</td></tr>';
 }
 function returnToCurrentMonth(){selectMonth(new Date().toISOString().slice(0,7));}
 async function selectMonth(m){
-  $('currentMonthLabel').textContent=m;
+  $('currentMonthLabel').textContent=monthName(m);
   const d=await api('/admin/api/daily?sessionId='+sid+'&month='+m);if(!d.success)return;
   const rows=d.data||[];
   const max=Math.max(1,...rows.map(r=>Number(r.daily_total)||0));
