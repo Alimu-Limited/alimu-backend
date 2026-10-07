@@ -34,7 +34,7 @@ import { getSupabase } from "../_shared/supabase.ts";
 import { handleAdmin } from "../_shared/admin.ts";
 
 const PUBLIC_BASE = Deno.env.get("PUBLIC_BASE_URL") ||
-  "https://pvslxeakzyhxfzlqakqg.supabase.co/functions/v1/hotspot";
+  "https://scarbubwnkdxarxxdzhj.supabase.co/functions/v1/hotspot";
 
 // After payment, send the CUSTOMER back to the router's own hotspot portal
 // (neutral URL). The portal already shows their credentials via /api/check-mac.

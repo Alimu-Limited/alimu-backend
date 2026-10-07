@@ -42,9 +42,9 @@ jobs:
       - name: Set secrets on Supabase
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: supabase secrets set --env-file /tmp/functions.env --project-ref pvslxeakzyhxfzlqakqg
+        run: supabase secrets set --env-file /tmp/functions.env --project-ref scarbubwnkdxarxxdzhj
 
       - name: Deploy functions
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: supabase functions deploy hotspot --project-ref pvslxeakzyhxfzlqakqg --use-api
+        run: supabase functions deploy hotspot --project-ref scarbubwnkdxarxxdzhj --use-api
