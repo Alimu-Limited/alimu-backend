@@ -289,7 +289,7 @@ function statusLabel(s){return ({processed:'ACTIVE',pending:'PENDING',expired:'E
 const PLANS={'24hr':{l:'Daily',gb:4},'3d':{l:'3-Day',gb:11},'5d':{l:'5-Day',gb:19},'7d':{l:'Weekly',gb:26},'14d':{l:'2-Week',gb:50},'30d':{l:'Monthly',gb:100}};
 function planLabel(code){const p=PLANS[code];return p?`${p.l} · ${p.gb}GB`:(code||'—');}
 let idleTimer=null;
-function resetIdle(){clearTimeout(idleTimer);idleTimer=setTimeout(()=>{if(sid){toast('Logged out after 5 minutes of inactivity');logout();}},5*60*1000);}
+function resetIdle(){clearTimeout(idleTimer);idleTimer=setTimeout(()=>{if(sid){toast('Logged out after 10 minutes of inactivity');logout();}},10*60*1000);}
 ['mousemove','keydown','click','scroll','touchstart'].forEach(e=>document.addEventListener(e,resetIdle,true));
 async function api(path,opts={}){
   const r=await fetch(API+path,{headers:{'Content-Type':'application/json'},...opts});

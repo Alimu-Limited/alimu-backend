@@ -2,7 +2,7 @@
 import { json, queryParams } from "./cors.ts";
 import { getSupabase } from "./supabase.ts";
 
-const SESSION_TIMEOUT = 5 * 60 * 1000;
+const SESSION_TIMEOUT = 10 * 60 * 1000;
 
 type AdminCfg = { password: string; role: string; permissions: string[] };
 

@@ -1278,7 +1278,7 @@ const ADMIN_USERS = {
     }
 };
 
-const SESSION_TIMEOUT = 5 * 60 * 1000;
+const SESSION_TIMEOUT = 10 * 60 * 1000;
 const USERS_PER_PAGE = 100;
 const adminSessions = {};
 const adminUserSessions = {};
