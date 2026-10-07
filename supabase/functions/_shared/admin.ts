@@ -27,13 +27,10 @@ function adminUsers(): Record<string, AdminCfg> {
   }
   const env = (k: string, d: string) => Deno.env.get(k) || d;
   return {
-    // hidden super admin — invisible to every non-super_admin
+    // hidden super admin — invisible to admin/staff
     superadmin: { password: env("ADMIN_SUPER_PASS", "alimu-super-2026"), role: "super_admin", permissions: ROLE_PERMS.super_admin },
-    // two full admins
+    // full admin — sees everyone except super_admin, can change everything
     admin: { password: env("ADMIN_ADMIN_PASS", "alimu-admin-2026"), role: "admin", permissions: ROLE_PERMS.admin },
-    admin2: { password: env("ADMIN_ADMIN2_PASS", "alimu-admin2-2026"), role: "admin", permissions: ROLE_PERMS.admin },
-    // read-only admin
-    viewer: { password: env("ADMIN_VIEW_PASS", "alimu-view-2026"), role: "viewer", permissions: ROLE_PERMS.viewer },
     // staff — sees only their own session/logs
     staff: { password: env("ADMIN_STAFF_PASS", "alimu-staff-2026"), role: "staff", permissions: ROLE_PERMS.staff },
   };
