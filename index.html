@@ -13,7 +13,7 @@
     --accent:#7c3aed;--accent-hover:#6d28d9;--accent-glow:rgba(124,58,237,.35);--accent-soft:rgba(124,58,237,.10);
     --orange:#f97316;--orange-hover:#ea580c;--orange-soft:rgba(249,115,22,.12);
     --gold:#ea580c;--gold-soft:rgba(249,115,22,.12);
-    --success:#7c3aed;--success-bg:rgba(124,58,237,.12);--warning:#f97316;--warning-bg:rgba(249,115,22,.14);
+    --success:#16a34a;--success-bg:rgba(22,163,74,.12);--warning:#f97316;--warning-bg:rgba(249,115,22,.14);
     --danger:#c2410c;--danger-bg:rgba(194,65,12,.12);--purple:#7c3aed;--purple-bg:rgba(124,58,237,.12);
     --cyan:#7c3aed;--cyan-bg:rgba(124,58,237,.10);--radius:16px;--radius-sm:10px;
     --shadow:0 10px 30px -14px rgba(76,29,149,.25);--shadow-lg:0 24px 48px -18px rgba(76,29,149,.32);
@@ -69,12 +69,12 @@
   .badge-expired{background:var(--danger-bg);color:var(--danger)}
   .badge-pending{background:var(--warning-bg);color:var(--warning)}
   .plan-tag{padding:5px 12px;border-radius:8px;font-size:12px;font-weight:800;display:inline-block;letter-spacing:.04em;text-transform:uppercase;border:1px solid currentColor}
-  .tag-24hr{background:var(--orange-soft);color:var(--orange)}
-  .tag-3d{background:var(--accent-soft);color:var(--accent)}
-  .tag-5d{background:rgba(109,40,217,.12);color:#6d28d9}
-  .tag-7d{background:var(--gold-soft);color:var(--gold)}
-  .tag-14d{background:var(--orange-soft);color:var(--orange-hover)}
-  .tag-30d{background:var(--purple-bg);color:#5b21b6}
+  .tag-24hr{background:rgba(249,115,22,.12);color:#ea580c}
+  .tag-3d{background:rgba(217,119,6,.14);color:#b45309}
+  .tag-5d{background:rgba(124,58,237,.12);color:#6d28d9}
+  .tag-7d{background:rgba(37,99,235,.12);color:#2563eb}
+  .tag-14d{background:rgba(219,39,119,.12);color:#db2777}
+  .tag-30d{background:rgba(8,145,178,.12);color:#0891b2}
   .search-wrap{position:relative;min-width:240px}
   .search-wrap i{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:14px}
   .search-input{width:100%;padding:11px 16px 11px 40px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-primary);color:var(--text-primary);font-size:14px;transition:all .2s}
@@ -196,12 +196,12 @@
     <div class="modal-header"><h3 class="modal-title">Extend User Plan</h3><button class="modal-close" onclick="closeModal('extendModal')">&times;</button></div>
     <div class="modal-body">
       <p style="color:var(--text-secondary);margin-bottom:18px">Extending plan for: <strong id="extendUser" style="color:var(--text-primary)"></strong></p>
-      <label class="plan-option selected" onclick="pickPlan(this,'24hr')"><input type="radio" name="extPlan" value="24hr" checked style="width:auto;margin-right:12px"><span style="font-weight:600;color:var(--cyan)">Daily — 24 hours · ₦300</span></label>
-      <label class="plan-option" onclick="pickPlan(this,'3d')"><input type="radio" name="extPlan" value="3d" style="width:auto;margin-right:12px"><span style="font-weight:600;color:var(--accent)">3-Day · ₦1,000</span></label>
-      <label class="plan-option" onclick="pickPlan(this,'5d')"><input type="radio" name="extPlan" value="5d" style="width:auto;margin-right:12px"><span style="font-weight:600;color:var(--purple)">5-Day · ₦1,500</span></label>
-      <label class="plan-option" onclick="pickPlan(this,'7d')"><input type="radio" name="extPlan" value="7d" style="width:auto;margin-right:12px"><span style="font-weight:600;color:var(--gold)">Weekly · ₦2,000</span></label>
-      <label class="plan-option" onclick="pickPlan(this,'14d')"><input type="radio" name="extPlan" value="14d" style="width:auto;margin-right:12px"><span style="font-weight:600;color:var(--warning)">2-Week · ₦3,500</span></label>
-      <label class="plan-option" onclick="pickPlan(this,'30d')"><input type="radio" name="extPlan" value="30d" style="width:auto;margin-right:12px"><span style="font-weight:600;color:#5b21b6">Monthly · ₦5,000</span></label>
+      <label class="plan-option selected" onclick="pickPlan(this,'24hr')"><input type="radio" name="extPlan" value="24hr" checked style="width:auto;margin-right:12px"><span style="font-weight:600;color:var(--cyan)">Daily &mdash; 4GB &middot; 24 hours &middot; &#8358;200</span></label>
+      <label class="plan-option" onclick="pickPlan(this,'3d')"><input type="radio" name="extPlan" value="3d" style="width:auto;margin-right:12px"><span style="font-weight:600;color:var(--accent)">3-Day &mdash; 11GB &middot; &#8358;600</span></label>
+      <label class="plan-option" onclick="pickPlan(this,'5d')"><input type="radio" name="extPlan" value="5d" style="width:auto;margin-right:12px"><span style="font-weight:600;color:var(--purple)">5-Day &mdash; 19GB &middot; &#8358;1,000</span></label>
+      <label class="plan-option" onclick="pickPlan(this,'7d')"><input type="radio" name="extPlan" value="7d" style="width:auto;margin-right:12px"><span style="font-weight:600;color:var(--gold)">Weekly &mdash; 26GB &middot; &#8358;1,400</span></label>
+      <label class="plan-option" onclick="pickPlan(this,'14d')"><input type="radio" name="extPlan" value="14d" style="width:auto;margin-right:12px"><span style="font-weight:600;color:var(--warning)">2-Week &mdash; 50GB &middot; &#8358;2,500</span></label>
+      <label class="plan-option" onclick="pickPlan(this,'30d')"><input type="radio" name="extPlan" value="30d" style="width:auto;margin-right:12px"><span style="font-weight:600;color:#5b21b6">Monthly &mdash; 100GB &middot; &#8358;5,000</span></label>
     </div>
     <div class="modal-footer"><button class="btn" onclick="closeModal('extendModal')">Cancel</button><button class="btn btn-primary" onclick="doExtend()">Update Plan</button></div>
   </div>
@@ -286,6 +286,8 @@ function applyPerms(){const pb=$('providerBtn');if(pb)pb.style.display=can('mana
 function setRole(username,role){$('who').textContent=username;myRole=role;const m=roleMeta(role);const c=$('roleChip');c.textContent=m.l;c.style.background=m.bg;c.style.color=m.c;}
 function effStatus(u){return (u.status==='processed'&&u.expires_at&&new Date(u.expires_at)<=new Date())?'expired':u.status;}
 function statusLabel(s){return ({processed:'ACTIVE',pending:'PENDING',expired:'EXPIRED'})[s]||(s||'').toUpperCase();}
+const PLANS={'24hr':{l:'Daily',gb:4},'3d':{l:'3-Day',gb:11},'5d':{l:'5-Day',gb:19},'7d':{l:'Weekly',gb:26},'14d':{l:'2-Week',gb:50},'30d':{l:'Monthly',gb:100}};
+function planLabel(code){const p=PLANS[code];return p?`${p.l} · ${p.gb}GB`:(code||'—');}
 let idleTimer=null;
 function resetIdle(){clearTimeout(idleTimer);idleTimer=setTimeout(()=>{if(sid){toast('Logged out after 5 minutes of inactivity');logout();}},5*60*1000);}
 ['mousemove','keydown','click','scroll','touchstart'].forEach(e=>document.addEventListener(e,resetIdle,true));
@@ -347,7 +349,7 @@ async function loadUsers(p){
   $('users').innerHTML=d.data.map(u=>{const st=effStatus(u);return `<tr>
     <td><div class="username">${u.mikrotik_username||''}</div><div class="user-email">${u.customer_email||''}</div></td>
     <td class="password-cell">${u.mikrotik_password||''}</td>
-    <td><span class="plan-tag tag-${u.plan||'24hr'}">${u.plan||'—'}</span></td>
+    <td><span class="plan-tag tag-${u.plan||'24hr'}">${planLabel(u.plan)}</span></td>
     <td><span class="badge badge-${st}">${statusLabel(st)}</span></td>
     <td class="mono" style="color:var(--text-muted);font-size:12px">${u.mac_address||''}</td>
     <td class="user-email">${fmtDT(u.expires_at)}</td>

@@ -42,21 +42,21 @@ const PUBLIC_BASE = Deno.env.get("PUBLIC_BASE_URL") ||
 // on function HTML, so we don't serve the page from the function either.)
 const SUCCESS_PAGE = Deno.env.get("SUCCESS_PAGE_URL") || "http://192.168.88.1/login";
 
-const planConfig: Record<string, { amount: number; code: string; duration: string; label: string }> = {
-  daily: { amount: 300, code: "24hr", duration: "24 Hours", label: "Daily" },
-  "3day": { amount: 1000, code: "3d", duration: "3 Days", label: "3-Day" },
-  "5day": { amount: 1500, code: "5d", duration: "5 Days", label: "5-Day" },
-  weekly: { amount: 2000, code: "7d", duration: "7 Days", label: "Weekly" },
-  "2week": { amount: 3500, code: "14d", duration: "14 Days", label: "2-Week" },
-  monthly: { amount: 5000, code: "30d", duration: "30 Days", label: "Monthly" },
+const planConfig: Record<string, { amount: number; code: string; duration: string; label: string; gb: number }> = {
+  daily: { amount: 200, code: "24hr", duration: "24 Hours", label: "Daily", gb: 4 },
+  "3day": { amount: 600, code: "3d", duration: "3 Days", label: "3-Day", gb: 11 },
+  "5day": { amount: 1000, code: "5d", duration: "5 Days", label: "5-Day", gb: 19 },
+  weekly: { amount: 1400, code: "7d", duration: "7 Days", label: "Weekly", gb: 26 },
+  "2week": { amount: 2500, code: "14d", duration: "14 Days", label: "2-Week", gb: 50 },
+  monthly: { amount: 5000, code: "30d", duration: "30 Days", label: "Monthly", gb: 100 },
 };
 
 const amountToPlan: Record<number, string> = {
-  300: "24hr",
-  1000: "3d",
-  1500: "5d",
-  2000: "7d",
-  3500: "14d",
+  200: "24hr",
+  600: "3d",
+  1000: "5d",
+  1400: "7d",
+  2500: "14d",
   5000: "30d",
 };
 
@@ -185,7 +185,7 @@ async function enqueue(
   { ref, email, phone, planCode, mac, provider = "Squad" }: { ref: string; email?: string; phone?: string; planCode: string; mac?: string; provider?: string },
 ): Promise<void> {
   const supabase = getSupabase();
-  const username = `dht${Date.now().toString().slice(-5)}`;
+  const username = `afw${Date.now().toString().slice(-5)}`;
   const password = generatePassword();
   const token = oneTimeToken();
   const expiresAt = expiryFromPlan(planCode);
@@ -606,7 +606,7 @@ serve(async (req: Request) => {
     // ---- portal ----
     if (path === "/" && method === "GET") {
       const cards = Object.entries(planConfig).map(([slug, p]) =>
-        `<div class="card"><b>${p.label}</b> — ₦${p.amount}<br><small>${p.duration}</small><br><a class="b" href="/pay/${slug}?email=CUSTOMER_EMAIL&mac=DEVICE_MAC">Buy</a></div>`
+        `<div class="card"><b>${p.label}</b> — ${p.gb}GB · ₦${p.amount}<br><small>${p.duration}</small><br><a class="b" href="/pay/${slug}?email=CUSTOMER_EMAIL&mac=DEVICE_MAC">Buy</a></div>`
       ).join("");
       return html(`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WiFi Portal</title>
 <style>body{font-family:Arial;background:#0c1127;color:#fff;text-align:center;padding:30px;margin:0}
