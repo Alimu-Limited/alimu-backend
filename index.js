@@ -95,7 +95,7 @@ const initializeMonnifyPayment = async ({ email, amount, plan, mac_address, desc
       customerName: 'WiFi Customer',
       customerEmail: email || 'customer@dreamhatcher.com',
       paymentReference: paymentReference,
-      paymentDescription: description || `Dream Hatcher WiFi - ${plan}`,
+      paymentDescription: description || `Alimu WiFi - ${plan}`,
       currencyCode: 'NGN',
       contractCode: process.env.MONNIFY_CONTRACT_CODE,
       redirectUrl: 'https://dreamhatcher-backend.onrender.com/monnify-callback',
@@ -147,7 +147,7 @@ app.get('/pay/:plan', async (req, res) => {
       amount: selectedPlan.amount,
       plan: selectedPlan.code,
       mac_address: mac,
-      description: `Dream Hatcher WiFi - ${selectedPlan.duration}`
+      description: `Alimu WiFi - ${selectedPlan.duration}`
     });
 
     console.log(`💵 Payment: ${plan} | MAC: ${mac} | Email: ${email} | Ref: ${paymentReference}`);
@@ -352,7 +352,7 @@ app.get('/auto-token', (req, res) => {
   const html = `
   <!DOCTYPE html>
   <html>
-  <head><title>Auto Login - Dream Hatcher</title>
+  <head><title>Auto Login - Alimu General Enterprises</title>
   <style>
     body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; padding: 50px; }
     .spinner { border: 4px solid rgba(255,255,255,0.1); border-top: 4px solid #00c9ff; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin: 20px auto; }
@@ -680,7 +680,7 @@ app.get('/success', async (req, res) => {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Payment Successful - Dream Hatcher</title>
+      <title>Payment Successful - Alimu General Enterprises</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -779,7 +779,7 @@ app.get('/success', async (req, res) => {
     </head>
     <body>
       <div class="container">
-        <div class="logo">🌐 Dream Hatcher Tech</div>
+        <div class="logo">🌐 Alimu General Enterprises</div>
 
         <div id="loading-state">
           <div class="success-icon">✅</div>
@@ -1147,7 +1147,7 @@ app.get('/health', async (req, res) => {
 app.get('/', (req, res) => {
   const html = `<!DOCTYPE html>
   <html>
-  <head><title>Dream Hatcher Tech - WiFi Portal</title>
+  <head><title>Alimu General Enterprises - WiFi Portal</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -1220,12 +1220,12 @@ app.get('/', (req, res) => {
   <body>
     <div class="container">
       <div class="logo">🌐</div>
-      <h1>Dream Hatcher Tech</h1>
+      <h1>Alimu General Enterprises</h1>
       <p>High-Speed Business WiFi Solutions</p>
       <div class="status-badge">✅ SYSTEM OPERATIONAL</div>
       <div class="option-card">
         <h3>📱 Already on our WiFi?</h3>
-        <p>If you're connected to <strong>Dream Hatcher WiFi</strong> network:</p>
+        <p>If you're connected to <strong>Alimu WiFi</strong> network:</p>
         <a href="http://192.168.88.1" class="btn">Go to WiFi Login Page</a>
         <p style="margin-top: 10px; font-size: 12px; color: #aaa;">Or enter in browser: <code>192.168.88.1</code></p>
       </div>
@@ -1251,7 +1251,7 @@ app.get('/', (req, res) => {
         <p style="font-size: 12px; color: #aaa;">24/7 Customer Support</p>
         <p style="margin-top: 10px; font-size: 12px;">Email: support@dreamhatcher-tech1.xo.je<br>Website: dreamhatcher-tech1.xo.je</p>
       </div>
-      <p style="margin-top: 20px; font-size: 12px; color: #888;">© 2024 Dream Hatcher Tech. All rights reserved.<br>Secure Payment Processing via Monnify</p>
+      <p style="margin-top: 20px; font-size: 12px; color: #888;">© 2024 Alimu General Enterprises. All rights reserved.<br>Secure Payment Processing via Monnify</p>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
     <script>QRCode.toCanvas(document.getElementById('qrcode'), 'http://192.168.88.1', { width: 150, margin: 1, color: { dark: '#000000', light: '#ffffff' } });</script>
@@ -1260,7 +1260,7 @@ app.get('/', (req, res) => {
   res.send(html);
 });
 
-// DREAM HATCHER ENTERPRISE ADMIN DASHBOARD v5.0
+// ALIMU GENERAL ENTERPRISES ADMIN DASHBOARD v5.0
 // Professional WiFi Management System with Role-Based Access Control
 // ============================================
 
@@ -1677,7 +1677,7 @@ function getLoginForm(sessionExpired) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Portal • Dream Hatcher</title>
+    <title>Admin Portal • Alimu General Enterprises</title>
     <style>
         :root {
             --bg-primary: #070b14;
@@ -1765,7 +1765,7 @@ function getLoginForm(sessionExpired) {
             <div class="logo">
                 <img src="https://i.imgur.com/f0xX5TT.png" style="width: 80px; height: 80px; border-radius: 16px;">
             </div>
-            <h1>Dream Hatcher Tech</h1>
+            <h1>Alimu General Enterprises</h1>
             <p>Secure Admin Portal</p>
             <div class="alert">Session expired. Please login again.</div>
             <form method="GET" action="/admin">
@@ -1922,7 +1922,7 @@ function renderDashboard(data) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DH Dashboard • Dream Hatcher</title>
+    <title>DH Dashboard • Alimu General Enterprises</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
     <style>
@@ -2227,7 +2227,7 @@ function renderDashboard(data) {
         <div class="brand">
             <div class="brand-logo"><img src="https://i.imgur.com/f0xX5TT.png" style="width: 48px; height: 48px; border-radius: 12px;"></div>
             <div>
-                <div class="brand-name">Dream Hatcher Tech</div>
+                <div class="brand-name">Alimu General Enterprises</div>
                 <div class="brand-user">
                     <span>${session.username}</span>
                     <span class="user-role">${session.role === 'super_admin' ? 'SUPER ADMIN' : 'ADMIN'}</span>
@@ -2345,7 +2345,7 @@ function renderDashboard(data) {
         </div>
 
         <div class="page-footer">
-            <p>Dream Hatcher Tech Dashboard v5.0 — Professional WiFi Management System</p>
+            <p>Alimu General Enterprises Dashboard v5.0 — Professional WiFi Management System</p>
             <div class="footer-stats">
                 <span><i class="fa-solid fa-database"></i> ${stats.total_users} Total Users</span>
                 <span><i class="fa-solid fa-money-bill-wave"></i> ${naira(stats.total_revenue_lifetime)} Lifetime Revenue</span>

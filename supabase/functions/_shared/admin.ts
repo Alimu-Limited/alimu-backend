@@ -6,6 +6,18 @@ const SESSION_TIMEOUT = 5 * 60 * 1000;
 
 type AdminCfg = { password: string; role: string; permissions: string[] };
 
+// Permission sets per role:
+//   super_admin -> everything (incl. force_logout)
+//   admin       -> full operations (no force_logout)
+//   viewer      -> read only
+//   staff       -> read only, and can only see their own session/logs
+const ROLE_PERMS: Record<string, string[]> = {
+  super_admin: ["delete", "create", "update", "extend", "manage_users", "export", "force_logout"],
+  admin: ["delete", "create", "update", "extend", "manage_users", "export"],
+  viewer: ["view"],
+  staff: ["view"],
+};
+
 function adminUsers(): Record<string, AdminCfg> {
   const raw = Deno.env.get("ADMIN_USERS");
   if (raw) {
@@ -13,25 +25,33 @@ function adminUsers(): Record<string, AdminCfg> {
       return JSON.parse(raw);
     } catch (_) { /* fall through */ }
   }
+  const env = (k: string, d: string) => Deno.env.get(k) || d;
   return {
-    superadmin: {
-      password: Deno.env.get("ADMIN_SUPER_PASS") || "london-super-2026",
-      role: "super_admin",
-      permissions: ["delete", "create", "update", "extend", "manage_users", "export", "force_logout"],
-    },
-    admin: {
-      password: Deno.env.get("ADMIN_VIEW_PASS") || "london-view-2026",
-      role: "check",
-      permissions: ["view"],
-    },
+    // hidden super admin — invisible to every non-super_admin
+    superadmin: { password: env("ADMIN_SUPER_PASS", "alimu-super-2026"), role: "super_admin", permissions: ROLE_PERMS.super_admin },
+    // two full admins
+    admin: { password: env("ADMIN_ADMIN_PASS", "alimu-admin-2026"), role: "admin", permissions: ROLE_PERMS.admin },
+    admin2: { password: env("ADMIN_ADMIN2_PASS", "alimu-admin2-2026"), role: "admin", permissions: ROLE_PERMS.admin },
+    // read-only admin
+    viewer: { password: env("ADMIN_VIEW_PASS", "alimu-view-2026"), role: "viewer", permissions: ROLE_PERMS.viewer },
+    // staff — sees only their own session/logs
+    staff: { password: env("ADMIN_STAFF_PASS", "alimu-staff-2026"), role: "staff", permissions: ROLE_PERMS.staff },
   };
 }
 
 function permsOf(role: string): string[] {
-  for (const cfg of Object.values(adminUsers())) {
-    if (cfg.role === role) return cfg.permissions;
-  }
-  return ["view"];
+  return ROLE_PERMS[role] || ["view"];
+}
+
+// Session/log visibility:
+//   super_admin     -> everyone
+//   admin / viewer  -> everyone except super_admin
+//   staff           -> only themselves
+function canSeeUser(viewerRole: string, self: string, target: string): boolean {
+  if (target === self) return true;
+  if (viewerRole === "super_admin") return true;
+  if (viewerRole === "staff") return false;
+  return adminUsers()[target]?.role !== "super_admin";
 }
 
 async function validateSession(sessionId?: string | null) {
@@ -48,6 +68,17 @@ async function validateSession(sessionId?: string | null) {
   }
   await sb.from("admin_logs").update({ last_activity: new Date().toISOString() }).eq("id", s.id);
   return s;
+}
+
+// Flip any processed account whose expiry has passed to 'expired'.
+// Mirrors the pg_cron job, so status is correct even between cron ticks.
+async function expireDue(): Promise<void> {
+  try {
+    await getSupabase().from("payment_queue")
+      .update({ status: "expired" })
+      .eq("status", "processed")
+      .lt("expires_at", new Date().toISOString());
+  } catch (_) { /* never block the request */ }
 }
 
 function clientIp(req: Request): string {
@@ -92,6 +123,7 @@ export async function handleAdmin(req: Request, path: string): Promise<Response>
   }
 
   if (path === "/admin/api/stats" && method === "GET") {
+    await expireDue();
     const { data, error } = await getSupabase().rpc("admin_stats");
     if (error) return json({ error: error.message }, 500);
     return json({ success: true, data });
@@ -125,6 +157,7 @@ export async function handleAdmin(req: Request, path: string): Promise<Response>
   }
 
   if (path === "/admin/api/users" && method === "GET") {
+    await expireDue();
     const page = Math.max(1, parseInt(q.get("page") || "1", 10));
     const search = (q.get("search") || "").trim();
     const status = (q.get("status") || "").trim();
@@ -179,6 +212,7 @@ export async function handleAdmin(req: Request, path: string): Promise<Response>
     const cfg = adminUsers();
     const out: Array<Record<string, unknown>> = [];
     for (const [username, c] of Object.entries(cfg)) {
+      if (!canSeeUser(session.role, session.username, username)) continue;
       const { data } = await getSupabase().from("admin_logs")
         .select("*").eq("username", username).order("login_time", { ascending: false }).limit(1);
       const row = data?.[0];
@@ -197,9 +231,12 @@ export async function handleAdmin(req: Request, path: string): Promise<Response>
   }
 
   if (path === "/admin/api/logs" && method === "GET") {
-    const { data, error } = await getSupabase().from("admin_logs")
+    let query = getSupabase().from("admin_logs")
       .select("username, role, admin_ip, login_time, last_activity, is_active")
       .order("login_time", { ascending: false }).limit(50);
+    if (session.role === "staff") query = query.eq("username", session.username);
+    else if (session.role !== "super_admin") query = query.neq("role", "super_admin");
+    const { data, error } = await query;
     if (error) return json({ error: error.message }, 500);
     return json({ success: true, data });
   }

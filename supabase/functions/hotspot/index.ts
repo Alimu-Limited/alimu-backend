@@ -1,4 +1,4 @@
-// hotspot edge function — port of the Dream Hatcher Express routes to Deno.
+// hotspot edge function — port of the Alimu General Enterprises Express routes to Deno.
 // Providers: Squad + Paystack (payment switch via app_settings / PAYMENT_PROVIDER).
 //
 // Paths (after /functions/v1/hotspot):
@@ -128,7 +128,7 @@ async function initSquad(
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${secret}` },
     body: JSON.stringify({
       amount: Math.round(amount * 100),
-      email: email || "customer@dreamhatcher.com",
+      email: email || "customer@alimuwifi.com",
       currency: "NGN",
       initiate_type: "inline",
       transaction_ref: reference,
@@ -152,7 +152,7 @@ async function initPaystack(
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${secret}` },
     body: JSON.stringify({
       amount: Math.round(amount * 100),
-      email: email || "customer@dreamhatcher.com",
+      email: email || "customer@alimuwifi.com",
       currency: "NGN",
       callback_url: `${PUBLIC_BASE}/paystack-callback`,
       metadata: { mac_address: mac || "unknown", plan },
