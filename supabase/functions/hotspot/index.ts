@@ -117,8 +117,15 @@ async function logActivity(
 }
 
 // ---------- payment providers ----------
+// Phone-only purchases need a gateway email; use a hidden placeholder derived
+// from the phone digits (mirrors the Sultanate behaviour).
+function phoneToEmail(phone?: string): string {
+  const digits = String(phone || "").replace(/\D/g, "");
+  return digits ? `${digits}@alimuwifi.com` : "customer@alimuwifi.com";
+}
+
 async function initSquad(
-  { email, amount, plan, mac }: { email?: string; amount: number; plan: string; mac?: string },
+  { email, phone, amount, plan, mac }: { email?: string; phone?: string; amount: number; plan: string; mac?: string },
 ): Promise<{ checkoutUrl: string; paymentReference: string }> {
   const base = Deno.env.get("SQUAD_BASE_URL") || "https://api-d.squadco.com";
   const secret = Deno.env.get("SQUAD_SECRET_KEY")!;
@@ -135,7 +142,7 @@ async function initSquad(
       customer_name: "WiFi Customer",
       callback_url: `${PUBLIC_BASE}/squad-callback`,
       payment_channels: ["card", "bank", "ussd", "transfer"],
-      metadata: { mac_address: mac || "unknown", plan },
+      metadata: { mac_address: mac || "unknown", plan, phone: phone || "" },
       pass_charge: false,
     }),
   });
@@ -144,7 +151,7 @@ async function initSquad(
 }
 
 async function initPaystack(
-  { email, amount, plan, mac }: { email?: string; amount: number; plan: string; mac?: string },
+  { email, phone, amount, plan, mac }: { email?: string; phone?: string; amount: number; plan: string; mac?: string },
 ): Promise<{ checkoutUrl: string; paymentReference: string }> {
   const secret = Deno.env.get("PAYSTACK_SECRET_KEY")!;
   const res = await fetch("https://api.paystack.co/transaction/initialize", {
@@ -155,7 +162,7 @@ async function initPaystack(
       email: email || "customer@alimuwifi.com",
       currency: "NGN",
       callback_url: `${PUBLIC_BASE}/paystack-callback`,
-      metadata: { mac_address: mac || "unknown", plan },
+      metadata: { mac_address: mac || "unknown", plan, phone: phone || "" },
     }),
   });
   const data = await res.json();
@@ -175,7 +182,7 @@ async function getActiveProvider(): Promise<string> {
   return fallback;
 }
 
-async function initPayment(args: { email?: string; amount: number; plan: string; mac?: string }) {
+async function initPayment(args: { email?: string; phone?: string; amount: number; plan: string; mac?: string }) {
   const provider = await getActiveProvider();
   return provider === "paystack" ? await initPaystack(args) : await initSquad(args);
 }
@@ -487,12 +494,14 @@ serve(async (req: Request) => {
       const selected = planConfig[plan];
       const q = queryParams(req);
       const mac = q.get("mac") || "unknown";
-      const email = q.get("email") || undefined;
+      const email = (q.get("email") || "").trim();
+      const phone = (q.get("phone") || "").trim();
       if (!selected) return html(errorPage("Invalid plan selected"), 400);
-      if (!email) return html(errorPage("Email address is required to complete purchase."), 400);
+      if (!email && !phone) return html(errorPage("An email address or phone number is required to complete purchase."), 400);
+      const contactEmail = email || phoneToEmail(phone);
       try {
-        const { checkoutUrl, paymentReference } = await initPayment({ email, amount: selected.amount, plan: selected.code, mac });
-        await logActivity("pay", `💵 Payment [${await getActiveProvider()}]: ${plan} | MAC: ${mac} | Email: ${email} | Ref: ${paymentReference}`, { ref: paymentReference, mac, level: "payment" });
+        const { checkoutUrl, paymentReference } = await initPayment({ email: contactEmail, phone, amount: selected.amount, plan: selected.code, mac });
+        await logActivity("pay", `💵 Payment [${await getActiveProvider()}]: ${plan} | MAC: ${mac} | ${email ? "Email: " + email : "Phone: " + phone} | Ref: ${paymentReference}`, { ref: paymentReference, mac, level: "payment" });
         return new Response(null, { status: 302, headers: { Location: checkoutUrl } });
       } catch (e) {
         console.error("payment init error", e);
@@ -502,11 +511,13 @@ serve(async (req: Request) => {
 
     if (path === "/api/initialize-payment" && method === "POST") {
       const body = await req.json().catch(() => ({}));
-      const { email, amount, plan, mac_address } = body as Record<string, unknown>;
+      const { email, phone, amount, plan, mac_address } = body as Record<string, unknown>;
       if (!amount || !plan) return json({ error: "Missing amount or plan" }, 400);
+      const initEmail = (email as string) || phoneToEmail(String(phone || ""));
       try {
         const { checkoutUrl, paymentReference } = await initPayment({
-          email: email as string,
+          email: initEmail,
+          phone: String(phone || ""),
           amount: Number(amount),
           plan: String(plan),
           mac: mac_address as string,
@@ -543,7 +554,7 @@ serve(async (req: Request) => {
         if (!planCode) return json({ error: "Invalid amount" }, 400);
         const ex = await getSupabase().from("payment_queue").select("id").eq("transaction_id", ref).limit(1);
         if (ex.data && ex.data.length > 0) return json({ received: true });
-        await enqueue({ ref, email: Body.email, phone: "", planCode, mac, provider: "Squad" });
+        await enqueue({ ref, email: Body.email, phone: meta.phone || "", planCode, mac, provider: "Squad" });
         return json({ received: true });
       } catch (e) {
         console.error("squad webhook error", e);
@@ -572,7 +583,7 @@ serve(async (req: Request) => {
         if (!planCode) return json({ error: "Invalid amount" }, 400);
         const ex = await getSupabase().from("payment_queue").select("id").eq("transaction_id", ref).limit(1);
         if (ex.data && ex.data.length > 0) return json({ received: true });
-        await enqueue({ ref, email: d.customer?.email, phone: d.customer?.phone || "", planCode, mac, provider: "Paystack" });
+        await enqueue({ ref, email: d.customer?.email, phone: meta.phone || d.customer?.phone || "", planCode, mac, provider: "Paystack" });
         return json({ received: true });
       } catch (e) {
         console.error("paystack webhook error", e);
