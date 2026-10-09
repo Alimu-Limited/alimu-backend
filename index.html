@@ -328,8 +328,6 @@ async function loadStats(){
   const d=await api('/admin/api/stats?sessionId='+sid);if(!d.success)return;const s=d.data;
   let sessions=0;
   try{const l=await api('/admin/api/sessions?sessionId='+sid);if(l.success)sessions=l.active;}catch(e){}
-  let activityCount=0;
-  try{const a=await api('/admin/api/activity?sessionId='+sid+'&hours=48&limit=500');if(a.success)activityCount=new Set((a.data||[]).filter(r=>r.ref).map(r=>r.ref)).size;}catch(e){}
   const cards=[
     {v:money(s.revenue_lifetime),label:'Total Revenue Generated',ic:'fa-money-bill-trend-up',c:'var(--gold)',bg:'var(--gold-soft)',tag:'Lifetime',currency:true,click:'openRevenue()',footer:'<i class="fa-solid fa-chart-line"></i> Click for detailed analytics'},
     {v:money(s.revenue_today),label:"Today's Revenue",ic:'fa-calendar-day',c:'var(--cyan)',bg:'var(--cyan-bg)',tag:'TODAY',currency:true,footer:`<i class="fa-solid fa-user-plus"></i> ${s.signups_today} signups today`},
@@ -338,7 +336,7 @@ async function loadStats(){
     {v:money(s.revenue_week),label:'This Week',ic:'fa-calendar-week',c:'var(--warning)',bg:'var(--warning-bg)',tag:'7 days',currency:true},
     {v:money(s.revenue_month),label:'This Month',ic:'fa-calendar-days',c:'var(--accent)',bg:'var(--accent-soft)',tag:'30 days',currency:true},
     {v:s.total_users,label:'Total Clients',ic:'fa-address-book',c:'var(--cyan)',bg:'var(--cyan-bg)',tag:'All time'},
-    {v:activityCount,label:'Live Activity',ic:'fa-wave-square',c:'var(--accent)',bg:'var(--accent-soft)',tag:'48h',click:'openActivity()',footer:'<i class="fa-solid fa-list"></i> Click for live feed'}
+    {v:s.expired,label:'Expired Users',ic:'fa-user-clock',c:'var(--danger)',bg:'var(--danger-bg)',tag:'LAPSED',click:"setFilter('expired')",footer:'<i class="fa-solid fa-filter"></i> Click to view expired'}
   ];
   $('stats').innerHTML=cards.map(c=>`<div class="metric" ${c.click?`onclick="${c.click}"`:''}>
     <div class="metric-header"><div class="metric-icon" style="background:${c.bg};color:${c.c}"><i class="fa-solid ${c.ic}"></i></div>
