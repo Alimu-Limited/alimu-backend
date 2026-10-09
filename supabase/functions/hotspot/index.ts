@@ -457,6 +457,12 @@ serve(async (req: Request) => {
     // ---- admin API ----
     if (path.startsWith("/admin/api/")) return await handleAdmin(req, path);
 
+    // ---- public settings ----
+    if (path === "/api/contact-method" && method === "GET") {
+      const { data } = await getSupabase().from("app_settings").select("value").eq("key", "contact_method").maybeSingle();
+      return json({ method: data?.value === "email" ? "email" : "phone" });
+    }
+
     // ---- router-facing (x-api-key) ----
     if (path === "/api/mikrotik-queue-text" && method === "GET") {
       if (!checkApiKey(req)) return text("FORBIDDEN", 403);

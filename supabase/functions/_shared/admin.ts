@@ -252,6 +252,20 @@ export async function handleAdmin(req: Request, path: string): Promise<Response>
     return json({ success: true, provider });
   }
 
+  if (path === "/admin/api/contact-method" && method === "GET") {
+    const { data } = await getSupabase().from("app_settings").select("value").eq("key", "contact_method").maybeSingle();
+    return json({ success: true, method: data?.value === "email" ? "email" : "phone" });
+  }
+  if (path === "/admin/api/contact-method" && method === "POST") {
+    if (!can("manage_users")) return json({ error: "Permission denied" }, 403);
+    const method = String(body.method || "").toLowerCase();
+    if (!["email", "phone"].includes(method)) return json({ error: "Invalid contact method" }, 400);
+    const { error } = await getSupabase().from("app_settings")
+      .upsert({ key: "contact_method", value: method, updated_at: new Date().toISOString() });
+    if (error) return json({ error: error.message }, 500);
+    return json({ success: true, method });
+  }
+
   if (path === "/admin/api/force-logout" && method === "POST") {
     if (session.role !== "super_admin") return json({ error: "Permission denied" }, 403);
     await getSupabase().from("admin_logs")
