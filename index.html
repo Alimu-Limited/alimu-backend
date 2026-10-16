@@ -170,6 +170,7 @@
       <button class="btn" onclick="refreshAll()"><i class="fa-solid fa-rotate"></i> Refresh</button>
       <button class="btn" id="contactToggleBtn" onclick="openContact()"><i class="fa-solid fa-mobile-screen"></i> <span id="contactLabel">Phone</span></button>
       <button class="btn" id="providerBtn" onclick="openProvider()"><i class="fa-solid fa-credit-card"></i> <span id="provLabel">Provider</span></button>
+      <button class="btn" id="subInfoBtn" onclick="openSub()" style="display:none"><i class="fa-solid fa-file-invoice-dollar"></i> Subscription</button>
       <button class="btn btn-danger" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> <span>Logout</span></button>
     </div>
   </nav>
@@ -292,6 +293,18 @@
   </div>
 </div>
 
+<!-- Subscription modal (superadmin only) -->
+<div class="modal-overlay" id="subModal">
+  <div class="modal-box" style="max-width:680px">
+    <div class="modal-header"><h3 class="modal-title"><i class="fa-solid fa-file-invoice-dollar" style="color:var(--accent)"></i> Site Subscription</h3><button class="modal-close" onclick="closeModal('subModal')">&times;</button></div>
+    <div class="modal-body">
+      <div id="subSummary" style="margin-bottom:16px"></div>
+      <div class="table-wrap" style="max-height:320px;overflow-y:auto"><table><thead><tr><th>Date</th><th>Reference</th><th style="text-align:right">Amount</th><th>Status</th></tr></thead><tbody id="subPays"></tbody></table></div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal('subModal')">Close</button></div>
+  </div>
+</div>
+
 <div id="toast" class="toast"></div>
 
 <script>
@@ -311,7 +324,7 @@ const ROLES={super_admin:{l:'SUPER ADMIN',bg:'var(--gold-soft)',c:'var(--gold)'}
 function roleMeta(r){return ROLES[r]||{l:(r||'ADMIN').toUpperCase(),bg:'var(--accent-soft)',c:'var(--accent)'};}
 let myPerms=['view'],myRole='';
 function can(p){return myPerms.includes(p);}
-function applyPerms(){const pb=$('providerBtn');if(pb)pb.style.display=can('manage_users')?'':'none';const cb=$('contactToggleBtn');if(cb)cb.style.display=can('manage_users')?'':'none';const fl=$('forceLogoutBtn');if(fl)fl.style.display=(myRole==='super_admin')?'':'none';}
+function applyPerms(){const pb=$('providerBtn');if(pb)pb.style.display=can('manage_users')?'':'none';const cb=$('contactToggleBtn');if(cb)cb.style.display=can('manage_users')?'':'none';const fl=$('forceLogoutBtn');if(fl)fl.style.display=(myRole==='super_admin')?'':'none';const sb=$('subInfoBtn');if(sb)sb.style.display=(myRole==='super_admin')?'':'none';}
 function setRole(username,role){$('who').textContent=username;myRole=role;const m=roleMeta(role);const c=$('roleChip');c.textContent=m.l;c.style.background=m.bg;c.style.color=m.c;}
 function effStatus(u){return (u.status==='processed'&&u.expires_at&&new Date(u.expires_at)<=new Date())?'expired':u.status;}
 function statusLabel(s){return ({processed:'ACTIVE',pending:'PENDING',expired:'EXPIRED'})[s]||(s||'').toUpperCase();}
@@ -455,6 +468,28 @@ function openContact(){const s=$('contactMethod');if(s)s.value=contactMethod;ope
 async function saveContact(){const v=$('contactMethod').value;const d=await api('/admin/api/contact-method',{method:'POST',body:JSON.stringify({sessionId:sid,method:v})});if(d&&d.success){contactMethod=d.method;applyContactLabel();toast('Purchases now require '+(contactMethod==='email'?'email':'phone number'));}else{toast((d&&d.error)||'Failed');}closeModal('contactModal');}
 function openProvider(){$('providerModal').classList.add('open');}
 async function saveProvider(){const d=await api('/admin/api/provider',{method:'POST',body:JSON.stringify({sessionId:sid,provider:$('provider').value})});toast(d.success?('Provider: '+d.provider):(d.error||''));closeModal('providerModal');loadProvider();}
+// ---- Site subscription (superadmin only) ----
+async function openSub(){
+  openModal('subModal');
+  $('subSummary').innerHTML='<div style="color:var(--text-muted)">Loading…</div>';
+  $('subPays').innerHTML='';
+  let d;try{d=await api('/admin/api/subscription?sessionId='+sid);}catch(e){d=null;}
+  if(!d||!d.success){$('subSummary').innerHTML='<div style="color:var(--danger)">'+((d&&d.error)||'Could not load subscription')+'</div>';return;}
+  const s=d.subscription||{};
+  const until=s.paid_until?fmtDT(s.paid_until):'—';
+  const badge=d.active?'<span class="badge badge-processed">ACTIVE</span>':'<span class="badge badge-expired">EXPIRED</span>';
+  $('subSummary').innerHTML=
+    '<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'+badge+
+    '<span>Monthly: <strong>'+money((s.monthly_amount||0)/100)+'</strong></span>'+
+    '<span>Paid until: <strong>'+until+'</strong></span></div>'+
+    '<div style="color:var(--text-secondary);font-size:13px">Total received: <strong style="color:var(--success)">'+money((d.total_paid||0)/100)+'</strong> · '+((d.payments||[]).length)+' transaction(s)'+(s.email?' · receipt: '+s.email:'')+'</div>';
+  $('subPays').innerHTML=(d.payments||[]).map(function(p){
+    const cls=p.status==='success'?'processed':(p.status==='pending'?'pending':'expired');
+    return '<tr><td class="user-email">'+fmtDT(p.created_at)+'</td><td class="mono" style="font-size:12px">'+(p.reference||'')+'</td>'+
+      '<td style="text-align:right"><strong>'+money((p.amount||0)/100)+'</strong></td>'+
+      '<td><span class="badge badge-'+cls+'">'+String(p.status||'').toUpperCase()+'</span> <span class="user-email">'+(p.kind||'')+'</span></td></tr>';
+  }).join('')||'<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-muted)">No payments yet</td></tr>';
+}
 // add a sessions shortcut into the Refresh area: click on "Network Live"
 document.querySelector('.chip')?.addEventListener('click',showSessions);
 async function restore(){

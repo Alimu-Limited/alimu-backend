@@ -292,6 +292,24 @@ export async function handleAdmin(req: Request, path: string): Promise<Response>
     return json({ success: true, method });
   }
 
+  // ---- site subscription (SUPERADMIN ONLY) ----
+  if (path === "/admin/api/subscription" && method === "GET") {
+    if (session.role !== "super_admin") return json({ error: "Permission denied" }, 403);
+    const sb = getSupabase();
+    const { data: sub } = await sb.from("subscription")
+      .select("status, paid_until, monthly_amount, email, last_reference, updated_at")
+      .eq("id", 1).maybeSingle();
+    const { data: pays } = await sb.from("subscription_payments")
+      .select("reference, amount, status, kind, paid_until, created_at")
+      .order("created_at", { ascending: false }).limit(24);
+    const active = !!sub && sub.status === "active" &&
+      (!sub.paid_until || new Date(sub.paid_until).getTime() > Date.now());
+    const totalPaid = (pays || [])
+      .filter((p) => p.status === "success")
+      .reduce((s, p) => s + (Number(p.amount) || 0), 0);
+    return json({ success: true, active, subscription: sub, payments: pays || [], total_paid: totalPaid });
+  }
+
   if (path === "/admin/api/force-logout" && method === "POST") {
     if (session.role !== "super_admin") return json({ error: "Permission denied" }, 403);
     await getSupabase().from("admin_logs")
