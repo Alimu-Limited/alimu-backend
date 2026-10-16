@@ -742,6 +742,22 @@ serve(async (req: Request) => {
         console.log("❌ invalid subscription webhook signature");
         return new Response("Invalid signature", { status: 400 });
       }
+      // This Squad account may also serve ANOTHER business. Squad allows only
+      // one webhook URL per account, so we act as a relay: after verifying, we
+      // forward the *identical* raw body and signature to the other business's
+      // webhook (their own HMAC check still passes unchanged).
+      const relay = Deno.env.get("SUB_FORWARD_WEBHOOK_URL");
+      if (relay) {
+        try {
+          await fetch(relay, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-squad-encrypted-body": received },
+            body: raw,
+          });
+        } catch (e) {
+          console.error("subscription webhook relay failed", e);
+        }
+      }
       try {
         const payload = JSON.parse(raw);
         const { Event, Body } = payload || {};
