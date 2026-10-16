@@ -714,9 +714,14 @@ serve(async (req: Request) => {
             transaction_ref: reference,
             customer_name: "Starlink Administrator",
             callback_url: `${PUBLIC_BASE}/subscription-callback`,
-            payment_channels: ["card", "bank", "transfer", "ussd"],
+            payment_channels: ["card", "bank", "transfer"],
             metadata: { site: SITE_ID, kind: "subscription" },
-            is_recurring: true,
+            // Card tokenisation (auto-renew) must be enabled on the Squad
+            // account first; until then this merchant returns
+            // "You are not authorized to use this resource." Set the secret
+            // SUB_RECURRING=1 once Squad enables it and monthly auto-charge
+            // starts working with no code change.
+            ...(Deno.env.get("SUB_RECURRING") === "1" ? { is_recurring: true } : {}),
             pass_charge: false,
           }),
         });
