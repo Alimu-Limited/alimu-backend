@@ -2,7 +2,8 @@
 # Alimu General Enterprises - Hotspot queue provisioner
 # ---------------------------------------------------------------------
 # Polls the backend, creates MikroTik hotspot users for paid orders, and
-# applies the per-plan DATA allowance (GB) as limit-bytes-in / -out.
+# applies the per-plan DATA allowance (GB) as limit-bytes-total (a single
+# up+down quota, matching the GB shown on the customer plan cards).
 # Schedule it e.g. every 1 minute:
 #   /system scheduler add name="alimu-provision" interval=1m \
 #       on-event="/system script run alimu-provision"
@@ -110,24 +111,29 @@
                 :local tag ("ALM|" . $plan . "|" . $expYear . "-" . $mStr . "-" . $dStr . "|" . $hStr . ":" . $utcMin)
 
                 :local existing [/ip hotspot user find where name=$username]
+                :local done false
                 :if ([:len $existing] > 0) do={
-                    :log warning ("ALIMU-PROV: " . $username . " exists, skipping")
+                    :log warning ("ALIMU-PROV: " . $username . " already exists - marking processed")
+                    :set done true
                 } else={
                     :do {
-                        :if (([:len $mac] > 10) and ($mac != "none") and ($mac != "unknown")) do={
+                        :if (([:len $mac] > 10) and ($mac != "none") and ($mac != "unknown") and ($mac != "00:00:00:00:00:00")) do={
                             /ip hotspot user add name=$username password=$password server=$hotspotServer \
                                 profile=$plan mac-address=$mac \
-                                limit-bytes-in=$bytes limit-bytes-out=$bytes comment=$tag
-                            :log warning ("ALIMU-PROV: CREATED " . $username . " | " . $gb . "GB | MAC:" . $mac)
+                                limit-bytes-total=$bytes comment=$tag
+                            :log warning ("ALIMU-PROV: CREATED " . $username . " | " . $gb . "GB total | MAC:" . $mac)
                         } else={
                             /ip hotspot user add name=$username password=$password server=$hotspotServer \
                                 profile=$plan \
-                                limit-bytes-in=$bytes limit-bytes-out=$bytes comment=$tag
-                            :log warning ("ALIMU-PROV: CREATED " . $username . " | " . $gb . "GB | no-MAC")
+                                limit-bytes-total=$bytes comment=$tag
+                            :log warning ("ALIMU-PROV: CREATED " . $username . " | " . $gb . "GB total | no-MAC")
                         }
+                        :set done true
                     } on-error={
-                        :log error ("ALIMU-PROV: FAILED to create " . $username)
+                        :log error ("ALIMU-PROV: FAILED to create " . $username . " - will retry next run")
                     }
+                }
+                :if ($done) do={
                     :set createdCount ($createdCount + 1)
                     :do {
                         /tool fetch url=("$markUrl/$rid\?api_key=$apiKey") mode=https http-method=post keep-result=no

@@ -257,7 +257,7 @@ async function enqueue(
   { ref, email, phone, planCode, mac, provider = "Squad" }: { ref: string; email?: string; phone?: string; planCode: string; mac?: string; provider?: string },
 ): Promise<void> {
   const supabase = getSupabase();
-  const username = `afw${Date.now().toString().slice(-5)}`;
+  const username = `ALM${Date.now().toString().slice(-5)}`;
   const password = generatePassword();
   const token = oneTimeToken();
   const expiresAt = expiryFromPlan(planCode);
