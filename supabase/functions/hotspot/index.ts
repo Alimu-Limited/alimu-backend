@@ -747,7 +747,9 @@ serve(async (req: Request) => {
       // forward the *identical* raw body and signature to the other business's
       // webhook (their own HMAC check still passes unchanged).
       const relay = Deno.env.get("SUB_FORWARD_WEBHOOK_URL");
-      if (relay) {
+      let isSubscriptionEvent = false;
+      try { isSubscriptionEvent = JSON.parse(raw)?.Body?.meta?.kind === "subscription"; } catch (_) { /* ignore */ }
+      if (relay && !isSubscriptionEvent) {
         try {
           await fetch(relay, {
             method: "POST",
