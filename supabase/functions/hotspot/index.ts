@@ -164,7 +164,7 @@ function squadBaseUrl(): string {
 // Fully separate from the WiFi plan payments: different Squad account,
 // different secret, different webhook. Received into the developer's account.
 const SITE_ID = Deno.env.get("SITE_ID") || "alimu";
-const SUBSCRIPTION_AMOUNT = 500000; // ₦5,000 in kobo
+const SUBSCRIPTION_AMOUNT = 450000; // ₦4,500 in kobo
 
 function subSecret(): string { return Deno.env.get("SUBSCRIPTION_SQUAD_SECRET_KEY") || ""; }
 function subBaseUrl(): string {
@@ -977,6 +977,19 @@ serve(async (req: Request) => {
       const ref = queryParams(req).get("reference") || queryParams(req).get("trxref") || "";
       await logActivity("callback", `🔗 Paystack callback: ${ref}`, { ref, level: "callback" });
       return new Response(null, { status: 302, headers: { Location: `${SUCCESS_PAGE}?reference=${encodeURIComponent(ref)}` } });
+    }
+
+    // ---- subscription lock on every public customer endpoint ----
+    // When the site's subscription is due, nothing may work: not the admin,
+    // not provisioning, not purchases, and not credential lookups.
+    if (!(await licenceActive()) && [
+      "/api/check-status", "/api/get-token", "/api/check-token",
+      "/api/check-email", "/api/check-phone", "/api/check-mac",
+    ].includes(path)) {
+      return json({
+        found: false, ready: false, maintenance: true,
+        message: "Service temporarily unavailable. Please contact the administrator.",
+      });
     }
 
     // ---- status / creds ----
