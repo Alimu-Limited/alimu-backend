@@ -753,23 +753,31 @@ serve(async (req: Request) => {
         console.log("❌ invalid subscription webhook signature");
         return new Response("Invalid signature", { status: 400 });
       }
-      // This Squad account may also serve ANOTHER business. Squad allows only
-      // one webhook URL per account, so we act as a relay: after verifying, we
-      // forward the *identical* raw body and signature to the other business's
-      // webhook (their own HMAC check still passes unchanged).
-      const relay = Deno.env.get("SUB_FORWARD_WEBHOOK_URL");
-      let isSubscriptionEvent = false;
-      try { isSubscriptionEvent = JSON.parse(raw)?.Body?.meta?.kind === "subscription"; } catch (_) { /* ignore */ }
-      if (relay && !isSubscriptionEvent) {
-        try {
-          await fetch(relay, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "x-squad-encrypted-body": received },
-            body: raw,
-          });
-        } catch (e) {
-          console.error("subscription webhook relay failed", e);
+      // Squad allows ONE webhook URL per account, and this account may serve
+      // other businesses AND other sites we run. Route accordingly:
+      //   not a subscription event -> the other business -> relay unchanged
+      //   subscription, other site -> ignore (multi-site needs the control plane)
+      //   subscription, this site  -> apply below
+      let meta: Record<string, unknown> = {};
+      try { meta = (JSON.parse(raw)?.Body?.meta as Record<string, unknown>) || {}; } catch (_) { /* ignore */ }
+      const isSubscription = meta.kind === "subscription";
+      const mine = isSubscription && (!meta.site || meta.site === SITE_ID);
+      if (!isSubscription) {
+        const relay = Deno.env.get("SUB_FORWARD_WEBHOOK_URL");
+        if (relay) {
+          try {
+            await fetch(relay, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "x-squad-encrypted-body": received },
+              body: raw,
+            });
+          } catch (e) { console.error("subscription webhook relay failed", e); }
         }
+        return json({ received: true });
+      }
+      if (!mine) {
+        await logActivity("subscription", `↪︎ Ignored subscription event for another site (${meta.site})`, { level: "callback" });
+        return json({ received: true });
       }
       try {
         const payload = JSON.parse(raw);
