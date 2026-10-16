@@ -253,11 +253,26 @@ async function initPayment(args: { email?: string; phone?: string; amount: numbe
 }
 
 // ---------- queue insertion ----------
+// Username: ALM + 5 digits. It MUST be unique — the router treats an existing
+// username as "already provisioned", so a collision would silently mark a
+// paying customer's order processed with no account. Check the DB and retry.
+async function uniqueUsername(): Promise<string> {
+  const supabase = getSupabase();
+  for (let i = 0; i < 8; i++) {
+    const digits = String(crypto.getRandomValues(new Uint32Array(1))[0] % 100000).padStart(5, "0");
+    const candidate = `ALM${digits}`;
+    const { data } = await supabase.from("payment_queue")
+      .select("id").eq("mikrotik_username", candidate).limit(1);
+    if (!data || data.length === 0) return candidate;
+  }
+  return `ALM${Date.now().toString().slice(-5)}${hex(randBytes(1)).toUpperCase()}`;
+}
+
 async function enqueue(
   { ref, email, phone, planCode, mac, provider = "Squad" }: { ref: string; email?: string; phone?: string; planCode: string; mac?: string; provider?: string },
 ): Promise<void> {
   const supabase = getSupabase();
-  const username = `ALM${Date.now().toString().slice(-5)}`;
+  const username = await uniqueUsername();
   const password = generatePassword();
   const token = oneTimeToken();
   const expiresAt = expiryFromPlan(planCode);
