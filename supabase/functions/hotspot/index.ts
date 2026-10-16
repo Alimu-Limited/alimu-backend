@@ -725,7 +725,10 @@ serve(async (req: Request) => {
             // SUB_RECURRING=1 once Squad enables it and monthly auto-charge
             // starts working with no code change.
             ...(Deno.env.get("SUB_RECURRING") === "1" ? { is_recurring: true } : {}),
-            pass_charge: false,
+            // pass_charge:true => Squad adds its transaction charges ON TOP for
+            // the payer, so the FULL amount is settled to the merchant (gross-up
+            // so ₦4,500 arrives sharp). The payer sees "4,500 + charges".
+            pass_charge: true,
           }),
         });
         const d = await res.json();
