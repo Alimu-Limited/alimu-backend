@@ -4,8 +4,8 @@
 # Polls the backend, creates MikroTik hotspot users for paid orders, and
 # applies the per-plan DATA allowance (GB) as limit-bytes-total (a single
 # up+down quota, matching the GB shown on the customer plan cards).
-# Schedule it e.g. every 1 minute:
-#   /system scheduler add name="alimu-provision" interval=1m \
+# Schedule it every 15s (matches Sultanate's payment-check cadence):
+#   /system scheduler add name="alimu-provision" interval=15s \
 #       on-event="/system script run alimu-provision"
 # (put this file in /system script, or /import it once.)
 #
@@ -28,8 +28,7 @@
 } on-error={}
 :local fetchOk false
 :do {
-    /tool fetch url=("$apiUrl\?api_key=$apiKey") mode=https dst-path=queue.txt
-    :delay 15s
+    /tool fetch url=("$apiUrl\?api_key=$apiKey") mode=https check-certificate=no dst-path=queue.txt
     :set fetchOk true
 } on-error={
     :log warning "ALIMU-PROV: Fetch failed"

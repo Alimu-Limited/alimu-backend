@@ -524,7 +524,7 @@ async function poll(){
       document.getElementById('pl').textContent=d.plan;document.getElementById('ex').textContent=d.expires_at?new Date(d.expires_at).toLocaleString():'';
       document.getElementById('loading').className='h';document.getElementById('creds').className='h';document.getElementById('t').textContent='Your credentials';
       document.getElementById('sp').style.display='none';
-      setTimeout(go,4000);return;}
+      setTimeout(go,5000);return;}
   }catch(e){}
   if(c>=20){document.getElementById('err').className='h';document.getElementById('err').classList.remove('h');document.getElementById('loading').className='h';return;}
   document.getElementById('msg').textContent=d?.message||'Waiting for your account...';

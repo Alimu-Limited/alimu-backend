@@ -324,6 +324,7 @@ function loadAll(){loadStats();loadUsers(1);loadProvider();loadContact();}
 function refreshAll(){loadAll();toast('Refreshed');}
 function tick(){const d=new Date();$('clock').textContent='Server Time: '+d.toLocaleTimeString();}
 setInterval(tick,1000);tick();
+setInterval(()=>{if(sid&&!document.querySelector('.modal-overlay.open')){loadStats();loadUsers(page);}},60000);
 async function loadStats(){
   const d=await api('/admin/api/stats?sessionId='+sid);if(!d.success)return;const s=d.data;
   let sessions=0;
