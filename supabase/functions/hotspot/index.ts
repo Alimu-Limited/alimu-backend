@@ -769,7 +769,10 @@ serve(async (req: Request) => {
       try {
         const payload = JSON.parse(raw);
         const { Event, Body } = payload || {};
-        if (Event !== "charge_successful" || !Body || Body.transaction_status !== "Success") {
+        // NOTE: Squad is inconsistent — the webhook sends "Success" but the
+        // verify endpoint sends "success". Compare case-insensitively.
+        if (Event !== "charge_successful" || !Body ||
+            String(Body.transaction_status || "").toLowerCase() !== "success") {
           return json({ received: true });
         }
         await applySubscriptionPayment(
@@ -824,7 +827,7 @@ serve(async (req: Request) => {
           const ex = await getSupabase().from("subscription_payments").select("id").eq("reference", ref).limit(1);
           if (!ex.data || ex.data.length === 0) {
             const v = await verifySubSquad(ref);
-            if (v && v.transaction_status === "Success") {
+            if (v && String(v.transaction_status || "").toLowerCase() === "success") {
               const info = (v.payment_information as Record<string, unknown>) || {};
               await applySubscriptionPayment(ref, Number(v.transaction_amount) || 0, (info.token_id as string) || null, (v.email as string) || null, v);
             }
@@ -897,7 +900,8 @@ serve(async (req: Request) => {
       try {
         const body = JSON.parse(raw);
         const { Event, Body } = body || {};
-        if (Event !== "charge_successful" || !Body || Body.transaction_status !== "Success") {
+        if (Event !== "charge_successful" || !Body ||
+            String(Body.transaction_status || "").toLowerCase() !== "success") {
           return json({ received: true });
         }
         const ref = Body.transaction_ref;
@@ -956,7 +960,7 @@ serve(async (req: Request) => {
           const ex = await getSupabase().from("payment_queue").select("id").eq("transaction_id", ref).limit(1);
           if (!ex.data || ex.data.length === 0) {
             const v = await verifySquad(ref);
-            if (v && v.transaction_status === "Success") {
+            if (v && String(v.transaction_status || "").toLowerCase() === "success") {
               const amountNaira = Number(v.transaction_amount) / 100;
               const planCode = amountToPlan[amountNaira];
               if (planCode) {
