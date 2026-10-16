@@ -14,6 +14,8 @@
 //   GET  /api/get-token?ref=                token by reference
 //   GET  /api/check-token                   creds by one-time token
 //   GET  /api/check-email?email=            creds by email
+//   GET  /api/check-phone?phone=            creds by phone
+//   GET  /api/check-mac?mac=                creds by device MAC
 //   GET  /api/mikrotik-queue-text           (router) pending users
 //   POST /api/mark-processed/:id            (router) mark created
 //   GET  /api/expired-users                 (router) expired users
@@ -82,6 +84,24 @@ function generatePaymentReference(length = 10): string {
   for (let i = 0; i < length; i++) r += chars[b[i] % chars.length];
   return r;
 }
+// Squad's verify endpoint does not echo payment metadata, so we carry the
+// device MAC inside the transaction reference itself. This lets the browser
+// callback reconstruct the order if the webhook is late or missing.
+function macToHex(mac?: string): string {
+  const h = String(mac || "").replace(/[^0-9a-fA-F]/g, "");
+  return h.length >= 12 ? h.slice(0, 12).toUpperCase() : "";
+}
+function parseSquadMac(ref: string): string {
+  const body = String(ref || "");
+  if (body.startsWith("SQ") && body.length >= 14) {
+    const hex = body.slice(2, 14);
+    if (/^[0-9A-Fa-f]{12}$/.test(hex)) {
+      const parts = hex.toUpperCase().match(/.{2}/g);
+      if (parts) return parts.join(":");
+    }
+  }
+  return "unknown";
+}
 function expiryFromPlan(code: string): Date {
   const map: Record<string, number> = { "24hr": 24, "3d": 72, "5d": 120, "7d": 168, "14d": 336, "30d": 720 };
   const hours = map[code] ?? 24;
@@ -117,37 +137,71 @@ async function logActivity(
 }
 
 // ---------- payment providers ----------
-// Phone-only purchases need a gateway email; use a hidden placeholder derived
-// from the phone digits (mirrors the Sultanate behaviour).
-function phoneToEmail(phone?: string): string {
-  const digits = String(phone || "").replace(/\D/g, "");
+// Digits-only phone normaliser, so the value stored at purchase time matches
+// the value a customer types when retrieving credentials later.
+function normalizePhone(phone?: string): string {
+  return String(phone || "").replace(/\D/g, "");
+}
+
+// Payment providers require a valid email address. If the customer only gave a
+// phone number, we synthesise a hidden placeholder email so the charge can
+// proceed; the real phone is stored on the order and in provider metadata.
+function contactEmail(email?: string, phone?: string): string {
+  if (email) return email;
+  const digits = normalizePhone(phone);
   return digits ? `${digits}@alimuwifi.com` : "customer@alimuwifi.com";
+}
+
+// Prefer an explicit SQUAD_BASE_URL; otherwise auto-pick the sandbox host for
+// `sandbox_...` keys so a test key is never sent to the live endpoint.
+function squadBaseUrl(): string {
+  const secret = Deno.env.get("SQUAD_SECRET_KEY") || "";
+  return Deno.env.get("SQUAD_BASE_URL") ||
+    (secret.startsWith("sandbox_") ? "https://sandbox-api-d.squadco.com" : "https://api-d.squadco.com");
+}
+
+// Server-to-server confirmation of a Squad transaction (used by the browser
+// callback as a fallback to the webhook). Returns Squad's `data` object.
+async function verifySquad(ref: string): Promise<Record<string, unknown> | null> {
+  const secret = Deno.env.get("SQUAD_SECRET_KEY") || "";
+  try {
+    const res = await fetch(`${squadBaseUrl()}/transaction/verify/${encodeURIComponent(ref)}`, {
+      headers: { Authorization: `Bearer ${secret}` },
+    });
+    const data = await res.json();
+    return (data?.data as Record<string, unknown>) || null;
+  } catch (_) {
+    return null;
+  }
 }
 
 async function initSquad(
   { email, phone, amount, plan, mac }: { email?: string; phone?: string; amount: number; plan: string; mac?: string },
 ): Promise<{ checkoutUrl: string; paymentReference: string }> {
-  const base = Deno.env.get("SQUAD_BASE_URL") || "https://api-d.squadco.com";
   const secret = Deno.env.get("SQUAD_SECRET_KEY")!;
-  const reference = "SQ" + generatePaymentReference(10);
+  const base = squadBaseUrl();
+  const reference = "SQ" + macToHex(mac) + generatePaymentReference(6);
   const res = await fetch(`${base}/transaction/initiate`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${secret}` },
     body: JSON.stringify({
       amount: Math.round(amount * 100),
-      email: email || "customer@alimuwifi.com",
+      email: contactEmail(email, phone),
       currency: "NGN",
       initiate_type: "inline",
       transaction_ref: reference,
       customer_name: "WiFi Customer",
       callback_url: `${PUBLIC_BASE}/squad-callback`,
       payment_channels: ["card", "bank", "ussd", "transfer"],
-      metadata: { mac_address: mac || "unknown", plan, phone: phone || "" },
+      metadata: { mac_address: mac || "unknown", plan, phone: normalizePhone(phone) },
       pass_charge: false,
     }),
   });
   const data = await res.json();
-  return { checkoutUrl: data?.data?.checkout_url, paymentReference: reference };
+  if (!res.ok || !data?.data?.checkout_url) {
+    throw new Error(`squad init failed: ${data?.message || JSON.stringify(data)}`);
+  }
+  return { checkoutUrl: data.data.checkout_url, paymentReference: reference };
 }
 
 async function initPaystack(
@@ -159,10 +213,10 @@ async function initPaystack(
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${secret}` },
     body: JSON.stringify({
       amount: Math.round(amount * 100),
-      email: email || "customer@alimuwifi.com",
+      email: contactEmail(email, phone),
       currency: "NGN",
       callback_url: `${PUBLIC_BASE}/paystack-callback`,
-      metadata: { mac_address: mac || "unknown", plan, phone: phone || "" },
+      metadata: { mac_address: mac || "unknown", plan, phone: normalizePhone(phone) },
     }),
   });
   const data = await res.json();
@@ -182,6 +236,17 @@ async function getActiveProvider(): Promise<string> {
   return fallback;
 }
 
+// Which contact field the customer portal should collect: "phone" or "email".
+// Controlled from the admin dashboard; defaults to phone.
+async function getContactMethod(): Promise<string> {
+  try {
+    const { data } = await getSupabase().from("app_settings").select("value").eq("key", "contact_method").maybeSingle();
+    const v = String(data?.value || "").toLowerCase();
+    if (v === "phone" || v === "email") return v;
+  } catch (_) { /* ignore */ }
+  return "phone";
+}
+
 async function initPayment(args: { email?: string; phone?: string; amount: number; plan: string; mac?: string }) {
   const provider = await getActiveProvider();
   return provider === "paystack" ? await initPaystack(args) : await initSquad(args);
@@ -198,8 +263,8 @@ async function enqueue(
   const expiresAt = expiryFromPlan(planCode);
   await supabase.from("payment_queue").insert({
     transaction_id: ref,
-    customer_email: email || "unknown@example.com",
-    customer_phone: phone || "",
+    customer_email: email || phone || "unknown@example.com",
+    customer_phone: normalizePhone(phone),
     plan: planCode,
     mikrotik_username: username,
     mikrotik_password: password,
@@ -397,6 +462,29 @@ async function checkEmail(email: string): Promise<Response> {
   });
 }
 
+async function checkPhone(phoneRaw: string): Promise<Response> {
+  const phone = normalizePhone(phoneRaw);
+  if (!phone) return json({ error: "Phone required" }, 400);
+  const { data } = await getSupabase()
+    .from("payment_queue")
+    .select("mikrotik_username, mikrotik_password, plan, expires_at, one_time_token")
+    .eq("customer_phone", phone)
+    .eq("status", "processed")
+    .gt("expires_at", new Date().toISOString())
+    .order("created_at", { ascending: false })
+    .limit(1);
+  const row = data?.[0];
+  if (!row) return json({ found: false, message: "No active account for this phone number." });
+  return json({
+    found: true,
+    username: row.mikrotik_username,
+    password: row.mikrotik_password,
+    plan: row.plan,
+    expires_at: row.expires_at,
+    token: row.one_time_token,
+  });
+}
+
 // ---------- success page ----------
 function successPage(ref: string): string {
   return `<!DOCTYPE html><html><head><meta charset="UTF-8">
@@ -466,8 +554,7 @@ serve(async (req: Request) => {
 
     // ---- public settings ----
     if (path === "/api/contact-method" && method === "GET") {
-      const { data } = await getSupabase().from("app_settings").select("value").eq("key", "contact_method").maybeSingle();
-      return json({ method: data?.value === "email" ? "email" : "phone" });
+      return json({ method: await getContactMethod() });
     }
 
     // ---- router-facing (x-api-key) ----
@@ -494,14 +581,18 @@ serve(async (req: Request) => {
       const selected = planConfig[plan];
       const q = queryParams(req);
       const mac = q.get("mac") || "unknown";
-      const email = (q.get("email") || "").trim();
-      const phone = (q.get("phone") || "").trim();
+      const email = (q.get("email") || "").trim() || undefined;
+      const phone = normalizePhone(q.get("phone") || "") || undefined;
       if (!selected) return html(errorPage("Invalid plan selected"), 400);
-      if (!email && !phone) return html(errorPage("An email address or phone number is required to complete purchase."), 400);
-      const contactEmail = email || phoneToEmail(phone);
+      const method = await getContactMethod();
+      if (method === "email") {
+        if (!email) return html(errorPage("An email address is required to complete this purchase."), 400);
+      } else {
+        if (!phone) return html(errorPage("A phone number is required to complete this purchase."), 400);
+      }
       try {
-        const { checkoutUrl, paymentReference } = await initPayment({ email: contactEmail, phone, amount: selected.amount, plan: selected.code, mac });
-        await logActivity("pay", `💵 Payment [${await getActiveProvider()}]: ${plan} | MAC: ${mac} | ${email ? "Email: " + email : "Phone: " + phone} | Ref: ${paymentReference}`, { ref: paymentReference, mac, level: "payment" });
+        const { checkoutUrl, paymentReference } = await initPayment({ email, phone, amount: selected.amount, plan: selected.code, mac });
+        await logActivity("pay", `💵 Payment [${await getActiveProvider()}]: ${plan} | MAC: ${mac} | ${email ? ("Email: " + email) : ("Phone: " + phone)} | Ref: ${paymentReference}`, { ref: paymentReference, mac, level: "payment" });
         return new Response(null, { status: 302, headers: { Location: checkoutUrl } });
       } catch (e) {
         console.error("payment init error", e);
@@ -513,16 +604,18 @@ serve(async (req: Request) => {
       const body = await req.json().catch(() => ({}));
       const { email, phone, amount, plan, mac_address } = body as Record<string, unknown>;
       if (!amount || !plan) return json({ error: "Missing amount or plan" }, 400);
-      const initEmail = (email as string) || phoneToEmail(String(phone || ""));
+      const method = await getContactMethod();
+      if (method === "email" && !email) return json({ error: "An email address is required to complete this purchase." }, 400);
+      if (method === "phone" && !normalizePhone(String(phone || ""))) return json({ error: "A phone number is required to complete this purchase." }, 400);
       try {
         const { checkoutUrl, paymentReference } = await initPayment({
-          email: initEmail,
+          email: email as string,
           phone: String(phone || ""),
           amount: Number(amount),
           plan: String(plan),
           mac: mac_address as string,
         });
-        await logActivity("pay", `💵 Payment [${await getActiveProvider()}]: ${plan} | MAC: ${mac_address} | Email: ${email} | Ref: ${paymentReference}`, { ref: paymentReference, mac: String(mac_address || ""), level: "payment" });
+        await logActivity("pay", `💵 Payment [${await getActiveProvider()}]: ${plan} | MAC: ${mac_address} | ${email ? ("Email: " + email) : ("Phone: " + phone)} | Ref: ${paymentReference}`, { ref: paymentReference, mac: String(mac_address || ""), level: "payment" });
         return json({ success: true, checkout_url: checkoutUrl, payment_reference: paymentReference });
       } catch (e) {
         console.error("initialize error", e);
@@ -554,7 +647,7 @@ serve(async (req: Request) => {
         if (!planCode) return json({ error: "Invalid amount" }, 400);
         const ex = await getSupabase().from("payment_queue").select("id").eq("transaction_id", ref).limit(1);
         if (ex.data && ex.data.length > 0) return json({ received: true });
-        await enqueue({ ref, email: Body.email, phone: meta.phone || "", planCode, mac, provider: "Squad" });
+        await enqueue({ ref, email: meta.phone ? "" : Body.email, phone: meta.phone || "", planCode, mac, provider: "Squad" });
         return json({ received: true });
       } catch (e) {
         console.error("squad webhook error", e);
@@ -583,7 +676,7 @@ serve(async (req: Request) => {
         if (!planCode) return json({ error: "Invalid amount" }, 400);
         const ex = await getSupabase().from("payment_queue").select("id").eq("transaction_id", ref).limit(1);
         if (ex.data && ex.data.length > 0) return json({ received: true });
-        await enqueue({ ref, email: d.customer?.email, phone: meta.phone || d.customer?.phone || "", planCode, mac, provider: "Paystack" });
+        await enqueue({ ref, email: meta.phone ? "" : d.customer?.email, phone: meta.phone || d.customer?.phone || "", planCode, mac, provider: "Paystack" });
         return json({ received: true });
       } catch (e) {
         console.error("paystack webhook error", e);
@@ -594,6 +687,29 @@ serve(async (req: Request) => {
     if (path === "/squad-callback" && method === "GET") {
       const ref = queryParams(req).get("transaction_ref") || queryParams(req).get("reference") || "";
       await logActivity("callback", `🔗 Squad callback: ${ref}`, { ref, level: "callback" });
+      // Belt-and-braces: if the webhook has not landed yet, confirm the charge
+      // directly with Squad and provision the account now. Idempotent by ref,
+      // so it is safe even when the webhook also fires.
+      if (ref) {
+        try {
+          const ex = await getSupabase().from("payment_queue").select("id").eq("transaction_id", ref).limit(1);
+          if (!ex.data || ex.data.length === 0) {
+            const v = await verifySquad(ref);
+            if (v && v.transaction_status === "Success") {
+              const amountNaira = Number(v.transaction_amount) / 100;
+              const planCode = amountToPlan[amountNaira];
+              if (planCode) {
+                const email = String(v.email || "");
+                const m = email.match(/^(\d+)@alimuwifi\.com$/);
+                const phone = m ? m[1] : "";
+                await enqueue({ ref, email: phone ? "" : email, phone, planCode, mac: parseSquadMac(ref), provider: "Squad" });
+              }
+            }
+          }
+        } catch (e) {
+          console.error("squad callback verify error", e);
+        }
+      }
       return new Response(null, { status: 302, headers: { Location: `${SUCCESS_PAGE}?reference=${encodeURIComponent(ref)}` } });
     }
     if (path === "/paystack-callback" && method === "GET") {
@@ -612,6 +728,7 @@ serve(async (req: Request) => {
     if (path === "/api/get-token" && method === "GET") return await getToken(queryParams(req).get("ref") || "");
     if (path === "/api/check-token" && method === "GET") return await checkToken(req);
     if (path === "/api/check-email" && method === "GET") return await checkEmail(queryParams(req).get("email") || "");
+    if (path === "/api/check-phone" && method === "GET") return await checkPhone(queryParams(req).get("phone") || "");
     if (path === "/api/check-mac" && method === "GET") return await checkMac(queryParams(req).get("mac") || "");
 
     if (path === "/health" && method === "GET") {
