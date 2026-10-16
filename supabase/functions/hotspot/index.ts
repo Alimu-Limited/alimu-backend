@@ -206,21 +206,24 @@ async function verifySubSquad(ref: string): Promise<Record<string, unknown> | nu
 }
 // Idempotent: records the payment and extends paid_until to the 1st of next month.
 async function applySubscriptionPayment(ref: string, amount: number, tokenId: string | null, email: string | null, raw: unknown): Promise<boolean> {
-  const ex = await getSupabase().from("subscription_payments").select("id").eq("reference", ref).limit(1);
-  if (ex.data && ex.data.length > 0) return true;
+  const sb = getSupabase();
+  const ex = await sb.from("subscription_payments").select("status").eq("reference", ref).maybeSingle();
+  if (ex.data?.status === "success") return true; // already applied (webhook + callback + cron are all idempotent)
   const until = firstOfNextMonthWAT().toISOString();
   const patch: Record<string, unknown> = {
     status: "active", paid_until: until, last_reference: ref, updated_at: new Date().toISOString(),
   };
   if (tokenId) patch.squad_token_id = tokenId;
   if (email) patch.email = email;
-  await getSupabase().from("subscription").update(patch).eq("id", 1);
-  const prior = await getSupabase().from("subscription_payments").select("id").limit(1);
-  const kind = (prior.data && prior.data.length > 0) ? "renewal" : "initial";
-  await getSupabase().from("subscription_payments").insert({
-    reference: ref, amount, status: "success",
-    kind, paid_until: until, raw: raw ?? null,
-  });
+  await sb.from("subscription").update(patch).eq("id", 1);
+  const anyPaid = await sb.from("subscription_payments").select("id").eq("status", "success").limit(1);
+  const kind = (anyPaid.data && anyPaid.data.length > 0) ? "renewal" : "initial";
+  const row = { amount, status: "success", kind, paid_until: until, raw: raw ?? null };
+  if (ex.data) {
+    await sb.from("subscription_payments").update(row).eq("reference", ref); // pending -> success
+  } else {
+    await sb.from("subscription_payments").insert({ reference: ref, ...row });
+  }
   clearLicenceCache();
   await logActivity("subscription", `✅ Subscription active — paid ₦${amount / 100}, until ${until}`, { ref, level: "payment" });
   return true;
@@ -737,6 +740,13 @@ serve(async (req: Request) => {
           return json({ error: "Could not start subscription checkout", details: d?.message }, 502);
         }
         await logActivity("subscription", `🧾 Subscription checkout — ₦${amount / 100}${firstTime ? " (pro-rata)" : ""} | ${email}`, { ref: reference, level: "payment" });
+        // Track it as pending so the reconciler can rescue it if the buyer
+        // never returns to the callback (closes the "paid but still locked" hole).
+        try {
+          await getSupabase().from("subscription_payments").insert({
+            reference, amount, status: "pending", kind: "checkout",
+          });
+        } catch (_) { /* ignore */ }
         return json({ success: true, checkout_url: d.data.checkout_url, reference, amount, prorata: firstTime });
       } catch (e) {
         console.error("subscription initiate error", e);
@@ -829,6 +839,34 @@ serve(async (req: Request) => {
         console.error("subscription charge error", e);
         return json({ charged: false, error: String(e) }, 502);
       }
+    }
+
+    if (path === "/api/subscription/reconcile" && method === "POST") {
+      // Safety net: called every few minutes by pg_cron. Any subscription
+      // checkout still "pending" is re-verified with Squad and applied — so a
+      // buyer who never returned to the callback still gets unlocked.
+      if (!checkApiKey(req)) return text("FORBIDDEN", 403);
+      if (!subSecret()) return json({ checked: 0, applied: 0, reason: "not configured" });
+      const sb = getSupabase();
+      const since = new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString();
+      const { data: pend } = await sb.from("subscription_payments")
+        .select("reference, amount").eq("status", "pending").gte("created_at", since).limit(25);
+      let applied = 0;
+      for (const row of pend || []) {
+        const v = await verifySubSquad(row.reference);
+        if (v && String(v.transaction_status || "").toLowerCase() === "success") {
+          const info = (v.payment_information as Record<string, unknown>) || {};
+          await applySubscriptionPayment(
+            row.reference,
+            Number(v.transaction_amount) || row.amount || 0,
+            (info.token_id as string) || null,
+            (v.email as string) || null,
+            v,
+          );
+          applied++;
+        }
+      }
+      return json({ success: true, checked: (pend || []).length, applied });
     }
 
     if (path === "/subscription-callback" && method === "GET") {
