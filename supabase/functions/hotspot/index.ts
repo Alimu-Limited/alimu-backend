@@ -589,6 +589,26 @@ serve(async (req: Request) => {
       if (!checkApiKey(req)) return text("FORBIDDEN", 403);
       return await markExpired(path.substring("/api/mark-expired/".length));
     }
+    // The router calls this when a user has consumed their whole data
+    // allowance (bytes-in + bytes-out >= limit-bytes-total). The backend only
+    // tracks time, so without this the dashboard would keep showing ACTIVE
+    // until expires_at even though the router already cut them.
+    if (path.startsWith("/api/mark-data-exhausted/") && method === "POST") {
+      if (!checkApiKey(req)) return text("FORBIDDEN", 403);
+      const username = decodeURIComponent(path.substring("/api/mark-data-exhausted/".length));
+      if (!username) return json({ success: false }, 400);
+      const { data } = await getSupabase()
+        .from("payment_queue")
+        .update({ status: "expired" })
+        .eq("mikrotik_username", username)
+        .eq("status", "processed")
+        .select("id");
+      if (data && data.length > 0) {
+        await logActivity("mikrotik", `📵 ${username} hit its data allowance — marked expired`, { level: "expired", username });
+        return json({ success: true, username });
+      }
+      return json({ success: false });
+    }
 
     // ---- payment init ----
     if (path.startsWith("/pay/") && method === "GET") {
