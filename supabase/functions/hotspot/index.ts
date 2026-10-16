@@ -696,7 +696,8 @@ serve(async (req: Request) => {
     if (path === "/api/subscription/initiate" && method === "POST") {
       if (!subSecret()) return json({ error: "Subscription payments are not configured yet." }, 503);
       const body = await req.json().catch(() => ({}));
-      const email = String(body.email || "").trim() || `admin@${SITE_ID}.dreamhatcher.ink`;
+      const email = String(body.email || "").trim() || Deno.env.get("SUB_EMAIL") ||
+        `admin@${SITE_ID}.dreamhatcher.ink`;
       const { data } = await getSupabase().from("subscription")
         .select("last_reference, monthly_amount").eq("id", 1).maybeSingle();
       const firstTime = !data?.last_reference;
