@@ -118,6 +118,10 @@
   #login button{width:100%;margin-top:8px}
   #login .security-note{margin-top:28px;font-size:12px;color:var(--text-muted);padding-top:20px;border-top:1px solid var(--border)}
   #loginErr{color:var(--danger);margin-top:12px;min-height:16px;font-size:13px}
+  #subscribe{display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:90%;max-width:440px;background:var(--bg-card);border:1px solid var(--border);border-top:4px solid var(--orange);border-radius:20px;padding:38px;text-align:center;box-shadow:var(--shadow-lg)}
+  #subscribe img{width:80px;height:80px;border-radius:16px;margin-bottom:20px}
+  #subscribe h1{font-family:'Orbitron',sans-serif;font-size:21px;font-weight:800;letter-spacing:.03em;margin-bottom:6px;color:var(--accent)}
+  #subAmount{font-family:'Orbitron',sans-serif;font-size:30px;font-weight:800;color:var(--orange);margin:6px 0 2px}
   .hidden{display:none!important}
   @media(max-width:768px){.topbar{padding:0 16px}.main-container{padding:20px}.metrics{grid-template-columns:1fr}.card-header{padding:16px}}
 </style>
@@ -134,6 +138,21 @@
   <button class="btn btn-primary" style="width:100%" onclick="login()">Authenticate</button>
   <p id="loginErr"></p>
   <div class="security-note">🔒 256-bit Encrypted Session</div>
+</div>
+
+<!-- SUBSCRIPTION REQUIRED -->
+<div id="subscribe">
+  <img src="logo.png" alt="Alimu General Enterprises logo">
+  <h1>Alimu General Enterprises</h1>
+  <p class="sub" style="color:var(--text-secondary);margin-bottom:22px">Subscription required</p>
+  <p style="color:var(--text-secondary);font-size:14px;margin-bottom:6px">Your site subscription has ended, so the dashboard and WiFi provisioning are paused.</p>
+  <div class="ig" style="text-align:center;margin-top:18px">
+    <label style="text-align:center">Amount due now</label>
+    <div id="subAmount">₦0</div>
+  </div>
+  <button class="btn btn-primary" id="subBtn" style="width:100%" onclick="subscribe()">Subscribe &amp; Continue</button>
+  <p id="subNote" style="color:var(--text-muted);font-size:12.5px;margin-top:14px;min-height:16px"></p>
+  <div class="security-note" style="margin-top:22px;font-size:12px;color:var(--text-muted);padding-top:18px;border-top:1px solid var(--border)">🔒 Secured by Squad · auto-renews monthly</div>
 </div>
 
 <!-- APP -->
@@ -442,7 +461,46 @@ async function restore(){
   try{ const me=await api('/admin/api/me?sessionId='+sid); if(!me||!me.username){logout();return;} myPerms=me.permissions||['view']; setRole(me.username,me.role); applyPerms(); showApp(); loadAll(); resetIdle(); }
   catch(e){ logout(); }
 }
-if(sid){ document.getElementById('login').classList.add('hidden'); showApp(); restore(); }
+// ---------- site subscription gate (enforced server-side as well) ----------
+let subInfo=null;
+async function loadSubscription(){
+  try{ const r=await fetch(API+'/api/subscription/status'); subInfo=await r.json(); }catch(e){ subInfo=null; }
+  return subInfo;
+}
+function showSubscribe(){
+  document.getElementById('login').classList.add('hidden');
+  document.getElementById('app').classList.add('hidden');
+  document.getElementById('subscribe').style.display='block';
+  const amt=(subInfo&&subInfo.amount_due)?subInfo.amount_due:500000;
+  const monthly=(subInfo&&subInfo.monthly_amount)?subInfo.monthly_amount:500000;
+  document.getElementById('subAmount').textContent=money(amt/100);
+  const note=document.getElementById('subNote');
+  const btn=document.getElementById('subBtn');
+  if(subInfo && subInfo.configured===false){
+    note.textContent='Subscription payments are not configured yet. Please contact support.';
+    btn.disabled=true;
+  } else if(subInfo && subInfo.prorata){
+    note.textContent='Pro-rated for the remaining days of this month, then '+money(monthly/100)+' on the 1st of every month (auto-renews).';
+  } else {
+    note.textContent=money(monthly/100)+' per month, renewing automatically on the 1st.';
+  }
+}
+async function subscribe(){
+  const btn=document.getElementById('subBtn');
+  btn.disabled=true; btn.textContent='Starting…';
+  try{
+    const r=await fetch(API+'/api/subscription/initiate',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    const d=await r.json();
+    if(d && d.checkout_url){ location.href=d.checkout_url; return; }
+    document.getElementById('subNote').textContent=(d&&d.error)||'Could not start checkout.';
+  }catch(e){ document.getElementById('subNote').textContent='Network error. Please try again.'; }
+  btn.disabled=false; btn.textContent='Subscribe & Continue';
+}
+(async function boot(){
+  await loadSubscription();
+  if(subInfo && subInfo.active===false){ showSubscribe(); return; }
+  if(sid){ document.getElementById('login').classList.add('hidden'); showApp(); restore(); }
+})();
 </script>
 </body>
 </html>

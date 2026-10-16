@@ -1104,6 +1104,16 @@
     </div>
 
     <!-- Overlay for MAC auto‑detection (same as before) -->
+    <!-- Site subscription / maintenance gate -->
+    <div id="maintenanceScreen" style="display:none; position:fixed; inset:0; z-index:99999; background:linear-gradient(135deg,#0a0b14,#141024); color:#fff; align-items:center; justify-content:center; text-align:center; padding:24px;">
+        <div style="max-width:420px;">
+            <div style="font-size:52px; margin-bottom:14px;">🛠️</div>
+            <h2 style="margin-bottom:10px; font-size:1.4rem;">Site under maintenance</h2>
+            <p style="color:rgba(255,255,255,.6); line-height:1.6;">This WiFi service is temporarily unavailable. Please contact the administrator.</p>
+            <p style="margin-top:18px;"><a href="tel:+2348103689825" style="color:#a78bfa; font-weight:700; text-decoration:none;">📞 08103689825</a></p>
+        </div>
+    </div>
+
     <div class="cred-overlay" id="credOverlay">
         <div class="cred-box">
             <div id="credLoading">
@@ -1210,6 +1220,22 @@
             .then(function(r){ return r.json(); })
             .then(function(d){ if (d && (d.method === 'phone' || d.method === 'email')) defaultContactMode = d.method; })
             .catch(function(){});
+
+        // ========== SITE SUBSCRIPTION / MAINTENANCE GATE ==========
+        // If the site's subscription has lapsed, lock the whole portal.
+        (function () {
+            fetch(BACKEND_URL + '/api/subscription/status')
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d && d.active === false) {
+                        var m = document.getElementById('maintenanceScreen');
+                        if (m) m.style.display = 'flex';
+                        var ov = document.getElementById('credOverlay');
+                        if (ov) ov.style.display = 'none';
+                    }
+                })
+                .catch(function () {});
+        })();
 
         // ========== EMAIL VALIDATION ==========
         function isValidEmail(email) {

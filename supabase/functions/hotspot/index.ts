@@ -33,7 +33,7 @@ import {
   text,
 } from "../_shared/cors.ts";
 import { getSupabase } from "../_shared/supabase.ts";
-import { handleAdmin } from "../_shared/admin.ts";
+import { handleAdmin, licenceActive, clearLicenceCache } from "../_shared/admin.ts";
 
 const PUBLIC_BASE = Deno.env.get("PUBLIC_BASE_URL") ||
   "https://scarbubwnkdxarxxdzhj.supabase.co/functions/v1/hotspot";
@@ -158,6 +158,70 @@ function squadBaseUrl(): string {
   const secret = Deno.env.get("SQUAD_SECRET_KEY") || "";
   return Deno.env.get("SQUAD_BASE_URL") ||
     (secret.startsWith("sandbox_") ? "https://sandbox-api-d.squadco.com" : "https://api-d.squadco.com");
+}
+
+// ---------- site subscription (developer's recurring licence) ----------
+// Fully separate from the WiFi plan payments: different Squad account,
+// different secret, different webhook. Received into the developer's account.
+const SITE_ID = Deno.env.get("SITE_ID") || "alimu";
+const SUBSCRIPTION_AMOUNT = 500000; // ₦5,000 in kobo
+
+function subSecret(): string { return Deno.env.get("SUBSCRIPTION_SQUAD_SECRET_KEY") || ""; }
+function subBaseUrl(): string {
+  return Deno.env.get("SUBSCRIPTION_SQUAD_BASE_URL") ||
+    (subSecret().startsWith("sandbox_") ? "https://sandbox-api-d.squadco.com" : "https://api-d.squadco.com");
+}
+
+// Nigeria is UTC+1 all year; shift so the UTC getters read WAT.
+function watParts(d = new Date()) {
+  const w = new Date(d.getTime() + 3600 * 1000);
+  return {
+    y: w.getUTCFullYear(),
+    m: w.getUTCMonth(),
+    day: w.getUTCDate(),
+    daysInMonth: new Date(Date.UTC(w.getUTCFullYear(), w.getUTCMonth() + 1, 0)).getUTCDate(),
+  };
+}
+// The billing period always ends on the 1st of a month (00:00 WAT).
+function firstOfNextMonthWAT(): Date {
+  const { y, m } = watParts();
+  const nextMonthStartWat = Date.UTC(m === 11 ? y + 1 : y, (m + 1) % 12, 1, 0, 0, 0);
+  return new Date(nextMonthStartWat - 3600 * 1000);
+}
+// First payment is pro-rated for the exact days left in the current month.
+function proRataAmount(): number {
+  const { day, daysInMonth } = watParts();
+  const daysRemaining = daysInMonth - day + 1;
+  return Math.max(1, Math.round(SUBSCRIPTION_AMOUNT * daysRemaining / daysInMonth));
+}
+async function verifySubSquad(ref: string): Promise<Record<string, unknown> | null> {
+  if (!subSecret()) return null;
+  try {
+    const res = await fetch(`${subBaseUrl()}/transaction/verify/${encodeURIComponent(ref)}`, {
+      headers: { Authorization: `Bearer ${subSecret()}` },
+    });
+    const d = await res.json();
+    return (d?.data as Record<string, unknown>) || null;
+  } catch (_) { return null; }
+}
+// Idempotent: records the payment and extends paid_until to the 1st of next month.
+async function applySubscriptionPayment(ref: string, amount: number, tokenId: string | null, email: string | null, raw: unknown): Promise<boolean> {
+  const ex = await getSupabase().from("subscription_payments").select("id").eq("reference", ref).limit(1);
+  if (ex.data && ex.data.length > 0) return true;
+  const until = firstOfNextMonthWAT().toISOString();
+  const patch: Record<string, unknown> = {
+    status: "active", paid_until: until, last_reference: ref, updated_at: new Date().toISOString(),
+  };
+  if (tokenId) patch.squad_token_id = tokenId;
+  if (email) patch.email = email;
+  await getSupabase().from("subscription").update(patch).eq("id", 1);
+  await getSupabase().from("subscription_payments").insert({
+    reference: ref, amount, status: "success",
+    kind: tokenId ? "initial" : "renewal", paid_until: until, raw: raw ?? null,
+  });
+  clearLicenceCache();
+  await logActivity("subscription", `✅ Subscription active — paid ₦${amount / 100}, until ${until}`, { ref, level: "payment" });
+  return true;
 }
 
 // Server-to-server confirmation of a Squad transaction (used by the browser
@@ -575,6 +639,7 @@ serve(async (req: Request) => {
     // ---- router-facing (x-api-key) ----
     if (path === "/api/mikrotik-queue-text" && method === "GET") {
       if (!checkApiKey(req)) return text("FORBIDDEN", 403);
+      if (!(await licenceActive())) return text(""); // subscription lapsed -> stop provisioning
       return await mikrotikQueueText();
     }
     if (path.startsWith("/api/mark-processed/") && method === "POST") {
@@ -610,8 +675,144 @@ serve(async (req: Request) => {
       return json({ success: false });
     }
 
+    // ---- site subscription (developer's recurring licence) ----
+    if (path === "/api/subscription/status" && method === "GET") {
+      const { data } = await getSupabase().from("subscription")
+        .select("status, paid_until, monthly_amount, last_reference").eq("id", 1).maybeSingle();
+      const active = !!data && data.status === "active" &&
+        (!data.paid_until || new Date(data.paid_until).getTime() > Date.now());
+      const firstTime = !data?.last_reference;
+      return json({
+        site: SITE_ID,
+        active,
+        paid_until: data?.paid_until ?? null,
+        monthly_amount: data?.monthly_amount ?? SUBSCRIPTION_AMOUNT,
+        amount_due: firstTime ? proRataAmount() : (data?.monthly_amount ?? SUBSCRIPTION_AMOUNT),
+        prorata: firstTime,
+        configured: !!subSecret(),
+      });
+    }
+
+    if (path === "/api/subscription/initiate" && method === "POST") {
+      if (!subSecret()) return json({ error: "Subscription payments are not configured yet." }, 503);
+      const body = await req.json().catch(() => ({}));
+      const email = String(body.email || "").trim() || `admin@${SITE_ID}.dreamhatcher.ink`;
+      const { data } = await getSupabase().from("subscription")
+        .select("last_reference, monthly_amount").eq("id", 1).maybeSingle();
+      const firstTime = !data?.last_reference;
+      const amount = firstTime ? proRataAmount() : (data?.monthly_amount ?? SUBSCRIPTION_AMOUNT);
+      const reference = "SUB" + generatePaymentReference(10);
+      try {
+        const res = await fetch(`${subBaseUrl()}/transaction/initiate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${subSecret()}` },
+          body: JSON.stringify({
+            amount,
+            email,
+            currency: "NGN",
+            initiate_type: "inline",
+            transaction_ref: reference,
+            customer_name: "Starlink Administrator",
+            callback_url: `${PUBLIC_BASE}/subscription-callback`,
+            payment_channels: ["card", "bank", "transfer", "ussd"],
+            metadata: { site: SITE_ID, kind: "subscription" },
+            is_recurring: true,
+            pass_charge: false,
+          }),
+        });
+        const d = await res.json();
+        if (!res.ok || !d?.data?.checkout_url) {
+          console.error("subscription initiate failed", d);
+          return json({ error: "Could not start subscription checkout", details: d?.message }, 502);
+        }
+        await logActivity("subscription", `🧾 Subscription checkout — ₦${amount / 100}${firstTime ? " (pro-rata)" : ""} | ${email}`, { ref: reference, level: "payment" });
+        return json({ success: true, checkout_url: d.data.checkout_url, reference, amount, prorata: firstTime });
+      } catch (e) {
+        console.error("subscription initiate error", e);
+        return json({ error: "Could not start subscription checkout" }, 502);
+      }
+    }
+
+    if (path === "/api/subscription-webhook" && method === "POST") {
+      const raw = await rawBody(req);
+      const secret = subSecret();
+      const received = (req.headers.get("x-squad-encrypted-body") || "").toUpperCase();
+      const computed = (await hmacHex(secret, raw)).toUpperCase();
+      if (!secret || !received || computed !== received) {
+        console.log("❌ invalid subscription webhook signature");
+        return new Response("Invalid signature", { status: 400 });
+      }
+      try {
+        const payload = JSON.parse(raw);
+        const { Event, Body } = payload || {};
+        if (Event !== "charge_successful" || !Body || Body.transaction_status !== "Success") {
+          return json({ received: true });
+        }
+        await applySubscriptionPayment(
+          Body.transaction_ref,
+          Number(Body.amount) || 0,
+          Body?.payment_information?.token_id || null,
+          Body.email || null,
+          Body,
+        );
+        return json({ received: true });
+      } catch (e) {
+        console.error("subscription webhook error", e);
+        return json({ error: "Webhook processing failed" }, 500);
+      }
+    }
+
+    if (path === "/api/subscription/charge" && method === "POST") {
+      // Called daily by pg_cron (pg_net). Charges the tokenised card when due.
+      if (!checkApiKey(req)) return text("FORBIDDEN", 403);
+      const { data } = await getSupabase().from("subscription").select("*").eq("id", 1).maybeSingle();
+      if (!data) return json({ charged: false, reason: "no licence row" });
+      if (!data.squad_token_id) return json({ charged: false, reason: "no tokenised card" });
+      if (!subSecret()) return json({ charged: false, reason: "not configured" });
+      const due = !data.paid_until || new Date(data.paid_until).getTime() <= Date.now();
+      if (!due) return json({ charged: false, reason: "not due", paid_until: data.paid_until });
+      const reference = "SUBR" + generatePaymentReference(10);
+      try {
+        const res = await fetch(`${subBaseUrl()}/transaction/charge_card`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${subSecret()}` },
+          body: JSON.stringify({
+            amount: data.monthly_amount || SUBSCRIPTION_AMOUNT,
+            token_id: data.squad_token_id,
+            transaction_ref: reference,
+          }),
+        });
+        const d = await res.json();
+        await logActivity("subscription", `🔁 Auto-renew attempt → ${d?.message || res.status}`, { ref: reference, level: "payment" });
+        return json({ charged: !!d?.success, reference, response: d });
+      } catch (e) {
+        console.error("subscription charge error", e);
+        return json({ charged: false, error: String(e) }, 502);
+      }
+    }
+
+    if (path === "/subscription-callback" && method === "GET") {
+      const ref = queryParams(req).get("transaction_ref") || queryParams(req).get("reference") || "";
+      await logActivity("subscription", `🔗 Subscription callback: ${ref}`, { ref, level: "callback" });
+      // Belt-and-braces: if the webhook hasn't landed, confirm with Squad and apply.
+      if (ref) {
+        try {
+          const ex = await getSupabase().from("subscription_payments").select("id").eq("reference", ref).limit(1);
+          if (!ex.data || ex.data.length === 0) {
+            const v = await verifySubSquad(ref);
+            if (v && v.transaction_status === "Success") {
+              const info = (v.payment_information as Record<string, unknown>) || {};
+              await applySubscriptionPayment(ref, Number(v.transaction_amount) || 0, (info.token_id as string) || null, (v.email as string) || null, v);
+            }
+          }
+        } catch (e) { console.error("subscription callback verify error", e); }
+      }
+      return new Response(null, { status: 302, headers: { Location: "https://alimu.dreamhatcher.ink/?subscribed=1" } });
+    }
+
     // ---- payment init ----
     if (path.startsWith("/pay/") && method === "GET") {
+      if (!(await licenceActive())) return html(errorPage("This WiFi service is temporarily unavailable. Please contact the administrator."), 503);
       const plan = path.substring("/pay/".length);
       const selected = planConfig[plan];
       const q = queryParams(req);
@@ -636,6 +837,7 @@ serve(async (req: Request) => {
     }
 
     if (path === "/api/initialize-payment" && method === "POST") {
+      if (!(await licenceActive())) return json({ error: "Service temporarily unavailable" }, 503);
       const body = await req.json().catch(() => ({}));
       const { email, phone, amount, plan, mac_address } = body as Record<string, unknown>;
       if (!amount || !plan) return json({ error: "Missing amount or plan" }, 400);

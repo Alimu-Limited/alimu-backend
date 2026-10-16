@@ -86,11 +86,37 @@ async function readJson(req: Request): Promise<Record<string, unknown>> {
   return await req.json().catch(() => ({}));
 }
 
+// ---- site licence (developer's subscription) ----
+// Short-cached so a page-load burst doesn't hammer the table, and fail-open so
+// a transient DB hiccup can never lock a paying client out of their own site.
+let _licCache: { at: number; active: boolean } | null = null;
+export async function licenceActive(): Promise<boolean> {
+  if (_licCache && Date.now() - _licCache.at < 15000) return _licCache.active;
+  let active = true;
+  try {
+    const { data } = await getSupabase().from("subscription")
+      .select("status, paid_until").eq("id", 1).maybeSingle();
+    active = !!data && data.status === "active" &&
+      (!data.paid_until || new Date(data.paid_until).getTime() > Date.now());
+  } catch (_) { active = true; }
+  _licCache = { at: Date.now(), active };
+  return active;
+}
+export function clearLicenceCache(): void { _licCache = null; }
+
 export async function handleAdmin(req: Request, path: string): Promise<Response> {
   const method = req.method;
   const q = queryParams(req);
   const body = ["POST", "PATCH"].includes(method) ? await readJson(req) : {};
   const sessionId = (body.sessionId as string) || q.get("sessionId");
+
+  // ---- site subscription gate (server-side, before ANY login) ----
+  if (!(await licenceActive())) {
+    return json({
+      error: "subscription_required",
+      message: "This site's subscription has expired. Subscribe to continue.",
+    }, 402);
+  }
 
   // ---- login ----
   if (path === "/admin/api/login" && method === "POST") {
