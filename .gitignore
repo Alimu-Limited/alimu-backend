@@ -3,6 +3,6 @@ supabase/.temp/
 .env
 *.log
 
-# Local router scripts that carry the real MIKROTIK_API_KEY — never commit.
+# Local router scripts that carry the real MIKROTIK_API_KEY - never commit.
 # The in-repo mikrotik/*.rsc files must keep REPLACE_WITH_MIKROTIK_API_KEY.
 *-router.rsc
