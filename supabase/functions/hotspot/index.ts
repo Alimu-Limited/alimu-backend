@@ -215,9 +215,11 @@ async function applySubscriptionPayment(ref: string, amount: number, tokenId: st
   if (tokenId) patch.squad_token_id = tokenId;
   if (email) patch.email = email;
   await getSupabase().from("subscription").update(patch).eq("id", 1);
+  const prior = await getSupabase().from("subscription_payments").select("id").limit(1);
+  const kind = (prior.data && prior.data.length > 0) ? "renewal" : "initial";
   await getSupabase().from("subscription_payments").insert({
     reference: ref, amount, status: "success",
-    kind: tokenId ? "initial" : "renewal", paid_until: until, raw: raw ?? null,
+    kind, paid_until: until, raw: raw ?? null,
   });
   clearLicenceCache();
   await logActivity("subscription", `✅ Subscription active — paid ₦${amount / 100}, until ${until}`, { ref, level: "payment" });
