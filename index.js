@@ -1,4 +1,4 @@
-require('dotenv').config();
+﻿require('dotenv').config();
 const express = require('express');
 const { Pool } = require('pg');
 const crypto = require('crypto');
@@ -26,12 +26,12 @@ const pool = new Pool({
 });
 
 pool.query('SELECT NOW()', (err, res) => {
-  if (err) console.error('❌ Database connection failed:', err);
-  else console.log('✅ Connected to Supabase');
+  if (err) console.error('âŒ Database connection failed:', err);
+  else console.log('âœ… Connected to Supabase');
 });
 
-process.on('uncaughtException', (error) => { console.error('💥 UNCAUGHT EXCEPTION:', error); });
-process.on('unhandledRejection', (reason, promise) => { console.error('💥 UNHANDLED REJECTION:', reason); });
+process.on('uncaughtException', (error) => { console.error('ðŸ’¥ UNCAUGHT EXCEPTION:', error); });
+process.on('unhandledRejection', (reason, promise) => { console.error('ðŸ’¥ UNHANDLED REJECTION:', reason); });
 
 function generatePassword(length = 8) {
   return crypto.randomBytes(length).toString('hex').slice(0, length);
@@ -70,7 +70,7 @@ setInterval(keepAlive, 14 * 60 * 1000);
 
 app.use((req, res, next) => {
   res.setTimeout(30000, () => {
-    console.log(`⏰ Timeout on ${req.method} ${req.url}`);
+    console.log(`â° Timeout on ${req.method} ${req.url}`);
   });
   next();
 });
@@ -150,16 +150,16 @@ app.get('/pay/:plan', async (req, res) => {
       description: `Alimu WiFi - ${selectedPlan.duration}`
     });
 
-    console.log(`💵 Payment: ${plan} | MAC: ${mac} | Email: ${email} | Ref: ${paymentReference}`);
+    console.log(`ðŸ’µ Payment: ${plan} | MAC: ${mac} | Email: ${email} | Ref: ${paymentReference}`);
     res.redirect(checkoutUrl);
   } catch (error) {
     console.error('Payment redirect error:', error.response?.data || error.message);
     res.send(`
       <html>
         <body style="font-family: Arial; text-align: center; padding: 50px; background: #1a1a2e; color: white;">
-          <h2>⚠️ Payment Error</h2>
+          <h2>âš ï¸ Payment Error</h2>
           <p>Could not initialize payment. Please try again.</p>
-          <a href="javascript:history.back()" style="color: #00d4ff;">← Go Back</a>
+          <a href="javascript:history.back()" style="color: #00d4ff;">â† Go Back</a>
           <p style="margin-top: 20px;">Support: 07037412314</p>
         </body>
       </html>
@@ -173,17 +173,17 @@ app.post('/api/initialize-payment', async (req, res) => {
     const { email, amount, plan, mac_address } = req.body;
     if (!amount || !plan) return res.status(400).json({ error: 'Missing amount or plan' });
     const { checkoutUrl, paymentReference } = await initializeMonnifyPayment({ email, amount, plan, mac_address });
-    console.log(`💳 API Payment: ${plan} | Amount: ₦${amount} | Ref: ${paymentReference}`);
+    console.log(`ðŸ’³ API Payment: ${plan} | Amount: â‚¦${amount} | Ref: ${paymentReference}`);
     res.json({ success: true, checkout_url: checkoutUrl, payment_reference: paymentReference });
   } catch (error) {
-    console.error('❌ Monnify initialize error:', error.response?.data || error.message);
+    console.error('âŒ Monnify initialize error:', error.response?.data || error.message);
     res.status(500).json({ error: 'Failed to initialize payment' });
   }
 });
 
 // ========== MONNIFY WEBHOOK (MODIFIED: adds one_time_token) ==========
 app.post('/api/monnify-webhook', async (req, res) => {
-  console.log('📥 Monnify webhook received');
+  console.log('ðŸ“¥ Monnify webhook received');
 
   const secret = process.env.MONNIFY_SECRET_KEY;
   const computedHash = crypto.createHmac('sha512', secret)
@@ -192,14 +192,14 @@ app.post('/api/monnify-webhook', async (req, res) => {
 
   const receivedSignature = req.headers['monnify-signature'];
   if (computedHash !== receivedSignature) {
-    console.log('❌ Invalid Monnify webhook signature');
+    console.log('âŒ Invalid Monnify webhook signature');
     return res.status(400).send('Invalid signature');
   }
 
   try {
     const { eventType, eventData } = req.body;
     if (eventType !== 'SUCCESSFUL_TRANSACTION') {
-      console.log(`📝 Received event type: ${eventType} - ignoring`);
+      console.log(`ðŸ“ Received event type: ${eventType} - ignoring`);
       return res.status(200).json({ received: true });
     }
 
@@ -217,7 +217,7 @@ app.post('/api/monnify-webhook', async (req, res) => {
       else if (amountNaira === 4100) plan = '14d';
       else if (amountNaira === 7500) plan = '30d';
       else {
-        console.error('❌ Invalid amount:', amountNaira);
+        console.error('âŒ Invalid amount:', amountNaira);
         return res.status(400).json({ error: 'Invalid amount' });
       }
     }
@@ -253,10 +253,10 @@ app.post('/api/monnify-webhook', async (req, res) => {
       ]
     );
 
-    console.log(`🙋 Queued user ${username} | Plan: ${plan} | Expires: ${expiresAt.toISOString()} | Token: ${oneTimeToken.substring(0,8)}...`);
+    console.log(`ðŸ™‹ Queued user ${username} | Plan: ${plan} | Expires: ${expiresAt.toISOString()} | Token: ${oneTimeToken.substring(0,8)}...`);
     return res.status(200).json({ received: true });
   } catch (error) {
-    console.error('❌ Monnify webhook error:', error.message);
+    console.error('âŒ Monnify webhook error:', error.message);
     return res.status(500).json({ error: 'Webhook processing failed' });
   }
 });
@@ -347,7 +347,7 @@ app.get('/api/check-email', async (req, res) => {
   }
 });
 
-// ========== AUTO‑TOKEN PAGE ==========
+// ========== AUTOâ€‘TOKEN PAGE ==========
 app.get('/auto-token', (req, res) => {
   const html = `
   <!DOCTYPE html>
@@ -360,7 +360,7 @@ app.get('/auto-token', (req, res) => {
   </style>
   </head>
   <body>
-    <h2>🔐 Automatic Login</h2>
+    <h2>ðŸ” Automatic Login</h2>
     <div class="spinner"></div>
     <div id="status">Checking your saved login...</div>
     <script>
@@ -372,7 +372,7 @@ app.get('/auto-token', (req, res) => {
           .then(r => r.json())
           .then(data => {
             if (data.found && data.username && data.password) {
-              document.getElementById('status').innerHTML = '✅ Account found! Redirecting...';
+              document.getElementById('status').innerHTML = 'âœ… Account found! Redirecting...';
               window.location.href = 'http://192.168.88.1/login?username=' + encodeURIComponent(data.username) + '&password=' + encodeURIComponent(data.password) + '&auto=1';
             } else {
               document.getElementById('status').innerHTML = 'Expired. <a href="/">Portal</a>';
@@ -395,7 +395,7 @@ app.get('/monnify-callback', (req, res) => {
   const { paymentReference, transactionReference } = req.query;
   const ref = paymentReference || transactionReference || 'unknown';
 
-  console.log('🔗 Monnify callback:', ref);
+  console.log('ðŸ”— Monnify callback:', ref);
 
   const html = `
   <!DOCTYPE html>
@@ -527,7 +527,7 @@ app.get('/monnify-callback', (req, res) => {
   </head>
   <body>
     <div class="container">
-      <div class="success-badge">✓ PAYMENT RECEIVED</div>
+      <div class="success-badge">âœ“ PAYMENT RECEIVED</div>
 
       <h2>Creating Your WiFi Account</h2>
 
@@ -562,7 +562,7 @@ app.get('/monnify-callback', (req, res) => {
       </div>
 
       <div class="warning">
-        ⚠️ <strong>Do NOT close this page!</strong><br>
+        âš ï¸ <strong>Do NOT close this page!</strong><br>
         Your account is being created. This takes about 20 seconds.
       </div>
 
@@ -582,7 +582,7 @@ app.get('/monnify-callback', (req, res) => {
         const icon = document.getElementById('icon' + stepNum);
         icon.className = 'step-icon step-' + state;
         if (state === 'done') {
-          icon.textContent = '✓';
+          icon.textContent = 'âœ“';
         }
       }
 
@@ -627,7 +627,7 @@ app.get('/monnify-callback', (req, res) => {
 
         if (seconds <= 0) {
           clearInterval(timer);
-          countdownEl.textContent = '✓';
+          countdownEl.textContent = 'âœ“';
           statusEl.textContent = 'Redirecting to your credentials...';
           window.location.href = '/success?reference=' + encodeURIComponent('${ref}');
         }
@@ -647,7 +647,7 @@ app.get('/success', async (req, res) => {
     const { reference, trxref, paymentReference } = req.query;
     const ref = reference || trxref || paymentReference;
 
-    console.log('💱 Success page accessed, ref:', ref);
+    console.log('ðŸ’± Success page accessed, ref:', ref);
 
     if (!ref) {
       return res.send(`
@@ -663,7 +663,7 @@ app.get('/success', async (req, res) => {
           </style>
         </head>
         <body>
-          <h1>⚠️ Payment Reference Missing</h1>
+          <h1>âš ï¸ Payment Reference Missing</h1>
           <div class="error">
             <p>No payment reference found.</p>
             <p>Please return to the payment page and try again.</p>
@@ -779,10 +779,10 @@ app.get('/success', async (req, res) => {
     </head>
     <body>
       <div class="container">
-        <div class="logo">🌐 Alimu General Enterprises</div>
+        <div class="logo">ðŸŒ Alimu General Enterprises</div>
 
         <div id="loading-state">
-          <div class="success-icon">✅</div>
+          <div class="success-icon">âœ…</div>
           <h2>Payment Successful!</h2>
           <div class="status-box">
             <div class="spinner"></div>
@@ -793,7 +793,7 @@ app.get('/success', async (req, res) => {
         </div>
 
         <div id="credentials-state" class="hidden">
-          <div class="success-icon">🛜🔑</div>
+          <div class="success-icon">ðŸ›œðŸ”‘</div>
           <h4>User & Password</h4>
 
           <div class="credentials-box">
@@ -808,20 +808,20 @@ app.get('/success', async (req, res) => {
             <div class="credential" id="expires-display">---</div>
           </div>
 
-          <button class="btn" onclick="copyCredentials()">📋 Copy Credentials</button>
-          <button class="btn" id="autoLoginBtn" onclick="autoLogin()" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">🚀 Auto-Login Now</button>
+          <button class="btn" onclick="copyCredentials()">ðŸ“‹ Copy Credentials</button>
+          <button class="btn" id="autoLoginBtn" onclick="autoLogin()" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">ðŸš€ Auto-Login Now</button>
 
           <div id="autoLoginStatus" style="margin-top: 15px; padding: 15px; background: rgba(0,0,0,0.3); border-radius: 10px; display: none;">
-            <p id="autoLoginText">⏳ Auto-connecting in <span id="autoLoginCountdown">8</span> seconds...</p>
+            <p id="autoLoginText">â³ Auto-connecting in <span id="autoLoginCountdown">8</span> seconds...</p>
           </div>
         </div>
 
         <div id="error-state" class="hidden">
-          <div class="success-icon">⏳</div>
+          <div class="success-icon">â³</div>
           <h2>Still Processing...</h2>
           <div class="status-box">
             <p id="error-text">Your account is being created. This may take a bit longer.</p>
-            <button class="btn" onclick="checkStatus()" style="margin-top: 15px;">🔄 Check Again</button>
+            <button class="btn" onclick="checkStatus()" style="margin-top: 15px;">ðŸ”„ Check Again</button>
             <p style="margin-top: 15px; font-size: 12px;">
               Reference: <strong>${ref}</strong><br>
               Save this reference and contact support if needed.
@@ -851,7 +851,7 @@ app.get('/success', async (req, res) => {
           const text = element.textContent;
           navigator.clipboard.writeText(text).then(function() {
             const original = element.textContent;
-            element.textContent = '✓ Copied!';
+            element.textContent = 'âœ“ Copied!';
             setTimeout(function() { element.textContent = original; }, 1000);
           });
         }
@@ -880,13 +880,13 @@ app.get('/success', async (req, res) => {
           }
 
           if (!credentials.username || !credentials.password) {
-            document.getElementById('autoLoginText').innerHTML = '❌ Credentials not ready. Please copy and login manually.';
+            document.getElementById('autoLoginText').innerHTML = 'âŒ Credentials not ready. Please copy and login manually.';
             return;
           }
 
-          document.getElementById('autoLoginText').innerHTML = '🔄 Connecting to WiFi login page...';
+          document.getElementById('autoLoginText').innerHTML = 'ðŸ”„ Connecting to WiFi login page...';
           document.getElementById('autoLoginBtn').disabled = true;
-          document.getElementById('autoLoginBtn').textContent = '⏳ Connecting...';
+          document.getElementById('autoLoginBtn').textContent = 'â³ Connecting...';
 
           const loginUrl = HOTSPOT_LOGIN_URL +
             '?username=' + encodeURIComponent(credentials.username) +
@@ -899,17 +899,17 @@ app.get('/success', async (req, res) => {
             setTimeout(function() {
               if (document.getElementById('autoLoginText')) {
                 document.getElementById('autoLoginText').innerHTML =
-                  '⚠️ Auto-login may have opened in a new tab. ' +
+                  'âš ï¸ Auto-login may have opened in a new tab. ' +
                   '<br>If not connected, <a href="' + loginUrl + '" target="_blank" style="color: #00c9ff;">click here</a> or login manually.';
                 document.getElementById('autoLoginBtn').disabled = false;
-                document.getElementById('autoLoginBtn').textContent = '🔄 Try Again';
+                document.getElementById('autoLoginBtn').textContent = 'ðŸ”„ Try Again';
               }
             }, 3000);
 
           } catch (e) {
             window.open(loginUrl, '_blank');
             document.getElementById('autoLoginText').innerHTML =
-              '✅ Login page opened! Check new tab/window.';
+              'âœ… Login page opened! Check new tab/window.';
           }
         }
 
@@ -919,8 +919,8 @@ app.get('/success', async (req, res) => {
             const btns = document.querySelectorAll('.btn');
             btns.forEach(function(btn) {
               if (btn.textContent.includes('Copy')) {
-                btn.textContent = '✓ Copied!';
-                setTimeout(function() { btn.textContent = '📋 Copy Credentials'; }, 2000);
+                btn.textContent = 'âœ“ Copied!';
+                setTimeout(function() { btn.textContent = 'ðŸ“‹ Copy Credentials'; }, 2000);
               }
             });
           });
@@ -1044,14 +1044,14 @@ app.get('/api/mikrotik-queue-text', async (req, res) => {
   try {
     const apiKey = req.headers['x-api-key'] || req.query.api_key;
     if (!apiKey || apiKey !== process.env.MIKROTIK_API_KEY) {
-      console.warn('❌ Invalid or missing API key');
+      console.warn('âŒ Invalid or missing API key');
       return res.status(403).send('FORBIDDEN');
     }
     const result = await pool.query(`
       SELECT id, mikrotik_username, mikrotik_password, plan, mac_address, expires_at
       FROM payment_queue WHERE status = 'pending' ORDER BY created_at ASC LIMIT 5`);
     if (result.rows.length === 0) return res.send('');
-    console.log(`✒️ Preparing ${result.rows.length} users for MikroTik`);
+    console.log(`âœ’ï¸ Preparing ${result.rows.length} users for MikroTik`);
     const lines = result.rows.map(row => {
       const expires = row.expires_at ? row.expires_at.toISOString() : '';
       return [row.mikrotik_username || '', row.mikrotik_password || '', row.plan || '',
@@ -1060,7 +1060,7 @@ app.get('/api/mikrotik-queue-text', async (req, res) => {
     res.set('Content-Type', 'text/plain');
     res.send(lines.join('\n'));
   } catch (error) {
-    console.error('❌ MikroTik queue error:', error.message);
+    console.error('âŒ MikroTik queue error:', error.message);
     res.set('Content-Type', 'text/plain');
     res.send('');
   }
@@ -1068,17 +1068,17 @@ app.get('/api/mikrotik-queue-text', async (req, res) => {
 
 app.post('/api/mark-processed/:id', async (req, res) => {
   try {
-    console.log(`⌛ Processing mark-processed for: ${req.params.id}`);
+    console.log(`âŒ› Processing mark-processed for: ${req.params.id}`);
     let userId = req.params.id;
     if (userId.includes('|')) userId = userId.split('|').pop();
     const idNum = parseInt(userId);
     if (isNaN(idNum)) return res.status(400).json({ success: false, error: 'Invalid ID' });
     const result = await pool.query(`UPDATE payment_queue SET status = 'processed' WHERE id = $1 RETURNING id`, [idNum]);
     if (result.rowCount === 0) return res.status(404).json({ success: false, error: 'User not found' });
-    console.log(`✅ Successfully marked ${idNum} as processed`);
+    console.log(`âœ… Successfully marked ${idNum} as processed`);
     res.json({ success: true, id: idNum });
   } catch (error) {
-    console.error('❌ Mark-processed error:', error.message);
+    console.error('âŒ Mark-processed error:', error.message);
     res.status(500).json({ success: false, error: 'Database update failed' });
   }
 });
@@ -1091,7 +1091,7 @@ app.get('/api/expired-users', async (req, res) => {
       SELECT id, mikrotik_username, mac_address, expires_at
       FROM payment_queue WHERE status = 'processed' AND expires_at IS NOT NULL AND expires_at < NOW() LIMIT 20`);
     if (result.rows.length === 0) return res.send('');
-    console.log(`⏰ Found ${result.rows.length} expired user(s)`);
+    console.log(`â° Found ${result.rows.length} expired user(s)`);
     const lines = result.rows.map(row => [
       row.mikrotik_username || 'unknown',
       '00:00:00:00:00:00',
@@ -1115,7 +1115,7 @@ app.post('/api/mark-expired/:id', async (req, res) => {
     const result = await pool.query(`
       UPDATE payment_queue SET status = 'expired' WHERE id = $1 AND status = 'processed' RETURNING mikrotik_username`, [idNum]);
     if (result.rowCount > 0) {
-      console.log(`⏰ Expired: ${result.rows[0].mikrotik_username} (ID: ${idNum})`);
+      console.log(`â° Expired: ${result.rows[0].mikrotik_username} (ID: ${idNum})`);
       return res.json({ success: true, id: idNum });
     }
     return res.json({ success: false });
@@ -1219,39 +1219,39 @@ app.get('/', (req, res) => {
   </head>
   <body>
     <div class="container">
-      <div class="logo">🌐</div>
+      <div class="logo">ðŸŒ</div>
       <h1>Alimu General Enterprises</h1>
       <p>High-Speed Business WiFi Solutions</p>
-      <div class="status-badge">✅ SYSTEM OPERATIONAL</div>
+      <div class="status-badge">âœ… SYSTEM OPERATIONAL</div>
       <div class="option-card">
-        <h3>📱 Already on our WiFi?</h3>
+        <h3>ðŸ“± Already on our WiFi?</h3>
         <p>If you're connected to <strong>Alimu WiFi</strong> network:</p>
         <a href="http://192.168.88.1" class="btn">Go to WiFi Login Page</a>
         <p style="margin-top: 10px; font-size: 12px; color: #aaa;">Or enter in browser: <code>192.168.88.1</code></p>
       </div>
       <div class="option-card">
-        <h3>💰 Need WiFi Access?</h3>
-        <p>Purchase WiFi packages starting at ₦350/day:</p>
+        <h3>ðŸ’° Need WiFi Access?</h3>
+        <p>Purchase WiFi packages starting at â‚¦350/day:</p>
         <a href="http://192.168.88.1/hotspotlogin.html" class="btn">View WiFi Plans & Pricing</a>
       </div>
       <div class="option-card">
-        <h3>✅ Already Paid?</h3>
+        <h3>âœ… Already Paid?</h3>
         <p>Check your payment status and get credentials:</p>
         <a href="/success" class="btn">Check Payment Status</a>
       </div>
       <div class="qr-section">
-        <h3>📲 Quick Connect QR</h3>
+        <h3>ðŸ“² Quick Connect QR</h3>
         <p>Scan to open WiFi login:</p>
         <div style="background: white; padding: 10px; display: inline-block; border-radius: 10px;"><div id="qrcode"></div></div>
         <p style="font-size: 12px; margin-top: 10px; color: #aaa;">Scan with phone camera</p>
       </div>
       <div class="support-box">
-        <h3>📞 Need Help?</h3>
+        <h3>ðŸ“ž Need Help?</h3>
         <p style="font-size: 18px; font-weight: bold; color: #00c9ff;">07037412314</p>
         <p style="font-size: 12px; color: #aaa;">24/7 Customer Support</p>
         <p style="margin-top: 10px; font-size: 12px;">Email: support@dreamhatcher-tech1.xo.je<br>Website: dreamhatcher-tech1.xo.je</p>
       </div>
-      <p style="margin-top: 20px; font-size: 12px; color: #888;">© 2024 Alimu General Enterprises. All rights reserved.<br>Secure Payment Processing via Monnify</p>
+      <p style="margin-top: 20px; font-size: 12px; color: #888;">Â© 2024 Alimu General Enterprises. All rights reserved.<br>Secure Payment Processing via Monnify</p>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
     <script>QRCode.toCanvas(document.getElementById('qrcode'), 'http://192.168.88.1', { width: 150, margin: 1, color: { dark: '#000000', light: '#ffffff' } });</script>
@@ -1286,7 +1286,7 @@ const adminUserSessions = {};
 // ========== HELPERS ==========
 function naira(amount) {
     const num = Number(amount) || 0;
-    return '₦' + num.toLocaleString('en-NG');
+    return 'â‚¦' + num.toLocaleString('en-NG');
 }
 
 function planLabel(plan) {
@@ -1463,8 +1463,8 @@ app.get('/admin/api/daily', async (req, res) => {
             SELECT 
                 EXTRACT(DAY FROM created_at) as day,
                 SUM(CASE plan
-                    WHEN '24hr' THEN 350 WHEN '3d' THEN 1050 WHEN '5d' THEN 1750
-                    WHEN '7d' THEN 2400 WHEN '14d' THEN 4100 WHEN '30d' THEN 7500 ELSE 0 END
+                    WHEN '24hr' THEN 200 WHEN '3d' THEN 600 WHEN '5d' THEN 1000
+                    WHEN '7d' THEN 1400 WHEN '14d' THEN 2500 WHEN '30d' THEN 5000 ELSE 0 END
                 ) as daily_total,
                 COUNT(*) as signups_count
             FROM payment_queue
@@ -1598,10 +1598,10 @@ async function handleAdminDashboard(req, res, sessionId) {
                 FROM payment_queue
             ),
             revenue_stats AS (
-                SELECT COALESCE(SUM(CASE WHEN plan = '24hr' THEN 350 WHEN plan = '3d' THEN 1050 WHEN plan = '5d' THEN 1750 WHEN plan = '7d' THEN 2400 WHEN plan = '14d' THEN 4100 WHEN plan = '30d' THEN 7500 ELSE 0 END),0) as total_revenue_lifetime,
-                       COALESCE(SUM(CASE WHEN created_at::date = CURRENT_DATE THEN CASE WHEN plan = '24hr' THEN 350 WHEN plan = '3d' THEN 1050 WHEN plan = '5d' THEN 1750 WHEN plan = '7d' THEN 2400 WHEN plan = '14d' THEN 4100 WHEN plan = '30d' THEN 7500 ELSE 0 END ELSE 0 END),0) as revenue_today,
-                       COALESCE(SUM(CASE WHEN created_at >= CURRENT_DATE - INTERVAL '7 days' THEN CASE WHEN plan = '24hr' THEN 350 WHEN plan = '3d' THEN 1050 WHEN plan = '5d' THEN 1750 WHEN plan = '7d' THEN 2400 WHEN plan = '14d' THEN 4100 WHEN plan = '30d' THEN 7500 END ELSE 0 END),0) as revenue_week,
-                       COALESCE(SUM(CASE WHEN created_at >= CURRENT_DATE - INTERVAL '30 days' THEN CASE WHEN plan = '24hr' THEN 350 WHEN plan = '3d' THEN 1050 WHEN plan = '5d' THEN 1750 WHEN plan = '7d' THEN 2400 WHEN plan = '14d' THEN 4100 WHEN plan = '30d' THEN 7500 END ELSE 0 END),0) as revenue_month
+                SELECT COALESCE(SUM(CASE WHEN plan = '24hr' THEN 200 WHEN plan = '3d' THEN 600 WHEN plan = '5d' THEN 1000 WHEN plan = '7d' THEN 1400 WHEN plan = '14d' THEN 2500 WHEN plan = '30d' THEN 5000 ELSE 0 END),0) as total_revenue_lifetime,
+                       COALESCE(SUM(CASE WHEN created_at::date = CURRENT_DATE THEN CASE WHEN plan = '24hr' THEN 200 WHEN plan = '3d' THEN 600 WHEN plan = '5d' THEN 1000 WHEN plan = '7d' THEN 1400 WHEN plan = '14d' THEN 2500 WHEN plan = '30d' THEN 5000 ELSE 0 END ELSE 0 END),0) as revenue_today,
+                       COALESCE(SUM(CASE WHEN created_at >= CURRENT_DATE - INTERVAL '7 days' THEN CASE WHEN plan = '24hr' THEN 200 WHEN plan = '3d' THEN 600 WHEN plan = '5d' THEN 1000 WHEN plan = '7d' THEN 1400 WHEN plan = '14d' THEN 2500 WHEN plan = '30d' THEN 5000 END ELSE 0 END),0) as revenue_week,
+                       COALESCE(SUM(CASE WHEN created_at >= CURRENT_DATE - INTERVAL '30 days' THEN CASE WHEN plan = '24hr' THEN 200 WHEN plan = '3d' THEN 600 WHEN plan = '5d' THEN 1000 WHEN plan = '7d' THEN 1400 WHEN plan = '14d' THEN 2500 WHEN plan = '30d' THEN 5000 END ELSE 0 END),0) as revenue_month
                 FROM payment_queue
             )
             SELECT u.*, r.* FROM user_stats u, revenue_stats r
@@ -1627,11 +1627,11 @@ async function handleAdminDashboard(req, res, sessionId) {
             FROM payment_queue ORDER BY created_at DESC LIMIT $1 OFFSET $2
         `, [USERS_PER_PAGE, safeOffset]);
 
-        // ===== MONTHLY REVENUE (ALL TIME — for year dropdown) =====
+        // ===== MONTHLY REVENUE (ALL TIME â€” for year dropdown) =====
         const monthlyRevenue = await pool.query(`
             WITH months AS (
                 SELECT DATE_TRUNC('month', created_at) as month_start,
-                       SUM(CASE plan WHEN '24hr' THEN 350 WHEN '3d' THEN 1050 WHEN '5d' THEN 1750 WHEN '7d' THEN 2400 WHEN '14d' THEN 4100 WHEN '30d' THEN 7500 ELSE 0 END) as total
+                       SUM(CASE plan WHEN '24hr' THEN 200 WHEN '3d' THEN 600 WHEN '5d' THEN 1000 WHEN '7d' THEN 1400 WHEN '14d' THEN 2500 WHEN '30d' THEN 5000 ELSE 0 END) as total
                 FROM payment_queue GROUP BY DATE_TRUNC('month', created_at)
             )
             SELECT to_char(month_start, 'Mon YYYY') as month_label,
@@ -1677,7 +1677,7 @@ function getLoginForm(sessionExpired) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Portal • Alimu General Enterprises</title>
+    <title>Admin Portal â€¢ Alimu General Enterprises</title>
     <style>
         :root {
             --bg-primary: #070b14;
@@ -1775,7 +1775,7 @@ function getLoginForm(sessionExpired) {
                 </div>
                 <div class="input-group">
                     <label for="pwd">Password</label>
-                    <input type="password" id="pwd" name="pwd" required placeholder="••••••••">
+                    <input type="password" id="pwd" name="pwd" required placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢">
                 </div>
                 <button type="submit">Authenticate</button>
             </form>
@@ -1904,13 +1904,13 @@ function renderDashboard(data) {
         paginationHtml += `<button class="page-btn ${currentPage === 1 ? 'disabled' : ''}" ${currentPage === 1 ? 'disabled' : ''} onclick="location.href='${pageLink(currentPage - 1)}'"><i class="fa-solid fa-angle-left"></i></button>`;
         if (startPage > 1) {
             paginationHtml += `<button class="page-btn" onclick="location.href='${pageLink(1)}'">1</button>`;
-            if (startPage > 2) paginationHtml += `<span class="page-ellipsis">…</span>`;
+            if (startPage > 2) paginationHtml += `<span class="page-ellipsis">â€¦</span>`;
         }
         pageWindow.forEach(p => {
             paginationHtml += `<button class="page-btn ${p === currentPage ? 'active' : ''}" onclick="location.href='${pageLink(p)}'">${p}</button>`;
         });
         if (endPage < totalPages) {
-            if (endPage < totalPages - 1) paginationHtml += `<span class="page-ellipsis">…</span>`;
+            if (endPage < totalPages - 1) paginationHtml += `<span class="page-ellipsis">â€¦</span>`;
             paginationHtml += `<button class="page-btn" onclick="location.href='${pageLink(totalPages)}'">${totalPages}</button>`;
         }
         paginationHtml += `<button class="page-btn ${currentPage === totalPages ? 'disabled' : ''}" ${currentPage === totalPages ? 'disabled' : ''} onclick="location.href='${pageLink(currentPage + 1)}'"><i class="fa-solid fa-angle-right"></i></button>`;
@@ -1922,7 +1922,7 @@ function renderDashboard(data) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DH Dashboard • Alimu General Enterprises</title>
+    <title>DH Dashboard â€¢ Alimu General Enterprises</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
     <style>
@@ -2120,32 +2120,32 @@ function renderDashboard(data) {
                     <label class="plan-option" style="display:block; padding:16px; border:2px solid var(--border); border-radius:var(--radius-sm); margin-bottom:12px; cursor:pointer;" onclick="selectPlan(this)">
                         <input type="radio" name="extPlan" value="24hr" checked style="margin-right:12px;">
                         <span style="font-weight:600; color:var(--cyan);">Daily Plan</span>
-                        <div style="margin-left:28px; font-size:14px; color:var(--text-secondary);">24 hours • ₦350</div>
+                        <div style="margin-left:28px; font-size:14px; color:var(--text-secondary);">24 hours â€¢ â‚¦350</div>
                     </label>
                     <label class="plan-option" style="display:block; padding:16px; border:2px solid var(--border); border-radius:var(--radius-sm); margin-bottom:12px; cursor:pointer;" onclick="selectPlan(this)">
                         <input type="radio" name="extPlan" value="3d" style="margin-right:12px;">
                         <span style="font-weight:600; color:var(--accent);">3-Day Plan</span>
-                        <div style="margin-left:28px; font-size:14px; color:var(--text-secondary);">3 days • ₦1,050</div>
+                        <div style="margin-left:28px; font-size:14px; color:var(--text-secondary);">3 days â€¢ â‚¦1,050</div>
                     </label>
                     <label class="plan-option" style="display:block; padding:16px; border:2px solid var(--border); border-radius:var(--radius-sm); margin-bottom:12px; cursor:pointer;" onclick="selectPlan(this)">
                         <input type="radio" name="extPlan" value="5d" style="margin-right:12px;">
                         <span style="font-weight:600; color:var(--purple);">5-Day Plan</span>
-                        <div style="margin-left:28px; font-size:14px; color:var(--text-secondary);">5 days • ₦1,750</div>
+                        <div style="margin-left:28px; font-size:14px; color:var(--text-secondary);">5 days â€¢ â‚¦1,750</div>
                     </label>
                     <label class="plan-option" style="display:block; padding:16px; border:2px solid var(--border); border-radius:var(--radius-sm); margin-bottom:12px; cursor:pointer;" onclick="selectPlan(this)">
                         <input type="radio" name="extPlan" value="7d" style="margin-right:12px;">
                         <span style="font-weight:600; color:var(--gold);">Weekly Plan</span>
-                        <div style="margin-left:28px; font-size:14px; color:var(--text-secondary);">7 days • ₦2,400</div>
+                        <div style="margin-left:28px; font-size:14px; color:var(--text-secondary);">7 days â€¢ â‚¦2,400</div>
                     </label>
                     <label class="plan-option" style="display:block; padding:16px; border:2px solid var(--border); border-radius:var(--radius-sm); margin-bottom:12px; cursor:pointer;" onclick="selectPlan(this)">
                         <input type="radio" name="extPlan" value="14d" style="margin-right:12px;">
                         <span style="font-weight:600; color:var(--warning);">2-Week Plan</span>
-                        <div style="margin-left:28px; font-size:14px; color:var(--text-secondary);">14 days • ₦4,100</div>
+                        <div style="margin-left:28px; font-size:14px; color:var(--text-secondary);">14 days â€¢ â‚¦4,100</div>
                     </label>
                     <label class="plan-option" style="display:block; padding:16px; border:2px solid var(--border); border-radius:var(--radius-sm); cursor:pointer;" onclick="selectPlan(this)">
                         <input type="radio" name="extPlan" value="30d" style="margin-right:12px;">
                         <span style="font-weight:600; color:#ec4899;">Monthly Plan</span>
-                        <div style="margin-left:28px; font-size:14px; color:var(--text-secondary);">30 days • ₦7,500</div>
+                        <div style="margin-left:28px; font-size:14px; color:var(--text-secondary);">30 days â€¢ â‚¦7,500</div>
                     </label>
                 </div>
             </div>
@@ -2207,7 +2207,7 @@ function renderDashboard(data) {
                     </table>
                 </div>
                 <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
-                    <h4 style="color: var(--text-primary); margin: 0;"><i class="fa-solid fa-chart-simple"></i> Daily Progress – <span id="currentMonthLabel">Current Month</span></h4>
+                    <h4 style="color: var(--text-primary); margin: 0;"><i class="fa-solid fa-chart-simple"></i> Daily Progress â€“ <span id="currentMonthLabel">Current Month</span></h4>
                     <button class="btn" style="padding: 6px 12px; font-size: 12px;" onclick="returnToCurrentMonth()"><i class="fa-solid fa-arrow-left"></i> Return to Current Month</button>
                 </div>
                 <div style="background: var(--bg-secondary); border-radius: var(--radius-sm); padding: 20px;">
@@ -2317,7 +2317,7 @@ function renderDashboard(data) {
             <div class="card-header">
                 <div>
                     <div class="card-title"><i class="fa-solid fa-users-gear" style="color:var(--accent); margin-right:10px;"></i>WiFi Client Management</div>
-                    <div class="card-subtitle">Page ${currentPage} of ${totalPages} • ${totalUsers.toLocaleString()} total users</div>
+                    <div class="card-subtitle">Page ${currentPage} of ${totalPages} â€¢ ${totalUsers.toLocaleString()} total users</div>
                 </div>
                 <div class="card-tools">
                     <div class="search-wrap"><i class="fa-solid fa-magnifying-glass"></i><input type="text" class="search-input" id="searchInput" placeholder="Search on this page..." autocomplete="off"></div>
@@ -2338,7 +2338,7 @@ function renderDashboard(data) {
             </div>
             <div class="pagination-bar">
                 <div class="pagination-info">
-                    Showing <strong>${recordStart.toLocaleString()}–${recordEnd.toLocaleString()}</strong> of <strong>${totalUsers.toLocaleString()}</strong> users
+                    Showing <strong>${recordStart.toLocaleString()}â€“${recordEnd.toLocaleString()}</strong> of <strong>${totalUsers.toLocaleString()}</strong> users
                 </div>
                 <div class="pagination-controls">
                     ${paginationHtml || '<span style="color: var(--text-muted); font-size: 13px;">All records on one page</span>'}
@@ -2347,7 +2347,7 @@ function renderDashboard(data) {
         </div>
 
         <div class="page-footer">
-            <p>Alimu General Enterprises Dashboard v5.0 — Professional WiFi Management System</p>
+            <p>Alimu General Enterprises Dashboard v5.0 â€” Professional WiFi Management System</p>
             <div class="footer-stats">
                 <span><i class="fa-solid fa-database"></i> ${stats.total_users} Total Users</span>
                 <span><i class="fa-solid fa-money-bill-wave"></i> ${naira(stats.total_revenue_lifetime)} Lifetime Revenue</span>
@@ -2362,7 +2362,7 @@ function renderDashboard(data) {
         let extendTargetId = null;
         let currentMonthRaw = null;
 
-        function formatNaira(amount) { const num = Number(amount) || 0; return '₦' + num.toLocaleString('en-NG'); }
+        function formatNaira(amount) { const num = Number(amount) || 0; return 'â‚¦' + num.toLocaleString('en-NG'); }
 
         // ===== YEAR FILTER for revenue table =====
         function filterYear(year) {
@@ -2501,16 +2501,16 @@ app.get('/favicon.ico', (req, res) => {
 
 // ========== ERROR HANDLER ==========
 app.use((err, req, res, next) => {
-  console.error('💥 Uncaught error:', err.message);
+  console.error('ðŸ’¥ Uncaught error:', err.message);
   res.status(500).send('Server Error. Please contact support: 07037412314');
 });
 
 // ========== START SERVER ==========
 const PORT = process.env.PORT || 10000;
 const server = app.listen(PORT, () => {
-  console.log(`🚀 Backend running on port ${PORT}`);
-  console.log(`🌐 Initialize: https://dreamhatcher-backend.onrender.com/api/initialize-payment`);
-  console.log(`🔗 Callback: https://dreamhatcher-backend.onrender.com/monnify-callback`);
-  console.log(`💰 Payment Provider: Monnify`);
+  console.log(`ðŸš€ Backend running on port ${PORT}`);
+  console.log(`ðŸŒ Initialize: https://dreamhatcher-backend.onrender.com/api/initialize-payment`);
+  console.log(`ðŸ”— Callback: https://dreamhatcher-backend.onrender.com/monnify-callback`);
+  console.log(`ðŸ’° Payment Provider: Monnify`);
 });
 server.setTimeout(30000);

@@ -81,8 +81,9 @@ export function toMikhmonRow(input: MikhmonUserInput): MikhmonRow | null {
   const disabled = String(input?.disabled ?? "").toLowerCase() === "true" ||
     String(input?.["limit-uptime"] ?? "") === "1s";
 
-  // Keep manual users OUT of paid-plan revenue. The real Mikhmon profile is
-  // shown in the contact line; the plan tag stays "Mikhmon".
+  // Manual vouchers must contribute to revenue exactly like the paid plans.
+  // The real Mikhmon profile maps to the dashboard plan code (24hr = 4 GB /
+  // ₦200). Unknown profiles stay "mikhmon" and contribute zero.
   const mapped = mapMikhmonPlan(input?.profile);
   const contact = mapped === "mikhmon" ? "Mikhmon" : `Mikhmon (${mapped})`;
 
@@ -90,7 +91,7 @@ export function toMikhmonRow(input: MikhmonUserInput): MikhmonRow | null {
     transaction_id: `mikhmon-${name}`,
     customer_email: contact,
     customer_phone: "Mikhmon",
-    plan: "mikhmon",
+    plan: mapped,
     mikrotik_username: name,
     mikrotik_password: String(input?.password ?? ""),
     mac_address: mac,

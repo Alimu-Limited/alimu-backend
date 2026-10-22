@@ -25,7 +25,7 @@ Deno.test("parseMikhmonExpiry handles timestamps and refuses voucher codes", () 
   assertEquals(parseMikhmonExpiry("2026-13-40 99:99:99"), null);
 });
 
-Deno.test("toMikhmonRow builds a safe, revenue-neutral row", () => {
+Deno.test("toMikhmonRow builds a safe, priced row", () => {
   const row = toMikhmonRow({
     name: "ALMv3hkc",
     password: "ALMv3hkc",
@@ -36,7 +36,7 @@ Deno.test("toMikhmonRow builds a safe, revenue-neutral row", () => {
   assertEquals(row.transaction_id, "mikhmon-ALMv3hkc");
   assertEquals(row.customer_email, "Mikhmon (24hr)");
   assertEquals(row.customer_phone, "Mikhmon");
-  assertEquals(row.plan, "mikhmon");
+  assertEquals(row.plan, "24hr");
   assertEquals(row.mikrotik_password, "ALMv3hkc");
   assertEquals(row.mac_address, "AA:BB:CC:DD:EE:FF");
   assertEquals(row.status, "processed");
@@ -144,7 +144,7 @@ Deno.test("first-login sync: unused vouchers skipped; active and previously-logg
 
   const names = db.tables.payment_queue.map((r) => r.mikrotik_username).sort();
   assertEquals(names, ["active", "logged"]);
-  assertEquals(db.tables.payment_queue.every((r) => r.plan === "mikhmon"), true);
+  assertEquals(db.tables.payment_queue.every((r) => r.plan === "24hr"), true);
   assertEquals(db.tables.payment_queue.every((r) => r.customer_phone === "Mikhmon"), true);
   assert(db.tables.payment_queue.some((r) => r.customer_email === "Mikhmon (24hr)"));
 });
@@ -201,3 +201,4 @@ Deno.test("disabled active user is inserted as expired", async () => {
   ], { firstLoginOnly: true, active: ["dead"] });
   assertEquals(db.tables.payment_queue[0].status, "expired");
 });
+
