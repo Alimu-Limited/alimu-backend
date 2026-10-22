@@ -195,3 +195,15 @@ Deno.test("sync sends disabled users as expired", async () => {
   assert(db.ops.some((o) => o.type === "insert"));
 });
 
+Deno.test("second identical sync changes nothing", async () => {
+  const db = new FakeDb();
+  const users = [{ name: "u1", password: "p1", profile: "24hrs", comment: "" }];
+  const first = await syncMikhmonUsers(db, users, { complete: true });
+  const second = await syncMikhmonUsers(db, users, { complete: true });
+  assertEquals(first.created, 1);
+  assertEquals(second.created, 0);
+  assertEquals(second.updated, 0);
+  assertEquals(second.unchanged, 1);
+  assertEquals(db.ops.filter((o) => o.type === "insert").length, 1);
+});
+

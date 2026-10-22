@@ -35,6 +35,7 @@ export interface MikhmonSyncResult {
   valid: number;
   created: number;
   updated: number;
+  unchanged: number;
   expired: number;
   failed: number;
   names: string[];
@@ -118,6 +119,7 @@ export async function syncMikhmonUsers(
     valid: rows.length,
     created: 0,
     updated: 0,
+    unchanged: 0,
     expired: 0,
     failed: 0,
     names,
@@ -127,17 +129,37 @@ export async function syncMikhmonUsers(
 
   const { data: existing, error: readError } = await sb
     .from("payment_queue")
-    .select("id, transaction_id")
+    .select("id, transaction_id, mikrotik_password, plan, mac_address, status, expires_at, customer_email, customer_phone")
     .like("transaction_id", "mikhmon-%");
   if (readError) throw new Error(readError.message || "Failed to read existing Mikhmon users");
 
-  const ids = new Map<string, unknown>();
-  for (const row of existing ?? []) ids.set(String(row.transaction_id), row.id);
+  const byTx = new Map<string, any>();
+  for (const row of existing ?? []) byTx.set(String(row.transaction_id), row);
+
+  const sameDate = (a: unknown, b: string | null): boolean => {
+    if (!a && !b) return true;
+    if (!a || !b) return false;
+    const ta = new Date(String(a)).getTime();
+    const tb = new Date(String(b)).getTime();
+    return !Number.isNaN(ta) && !Number.isNaN(tb) && ta === tb;
+  };
 
   for (const row of rows) {
-    const id = ids.get(row.transaction_id);
-    if (id !== undefined) {
-      const { error } = await sb.from("payment_queue").update(row).eq("id", id);
+    const old = byTx.get(row.transaction_id);
+    if (old) {
+      const unchanged =
+        String(old.mikrotik_password ?? "") === row.mikrotik_password &&
+        String(old.plan ?? "") === row.plan &&
+        String(old.mac_address ?? "") === row.mac_address &&
+        String(old.status ?? "") === row.status &&
+        String(old.customer_email ?? "") === row.customer_email &&
+        String(old.customer_phone ?? "") === row.customer_phone &&
+        sameDate(old.expires_at, row.expires_at);
+      if (unchanged) {
+        result.unchanged++;
+        continue;
+      }
+      const { error } = await sb.from("payment_queue").update(row).eq("id", old.id);
       if (error) result.failed++;
       else result.updated++;
     } else {

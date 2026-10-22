@@ -394,10 +394,11 @@ async function mikhmonSync(req: Request): Promise<Response> {
   const complete = body.complete === true;
   try {
     const result = await syncMikhmonUsers(getSupabase(), body.users, { dryRun, complete });
-    if (!dryRun) {
+    const changed = result.created + result.updated + result.expired + result.failed;
+    if (!dryRun && changed > 0) {
       await logActivity(
         "mikhmon",
-        `Mikhmon sync: ${result.created} new, ${result.updated} updated, ${result.expired} expired, ${result.failed} failed`,
+        `Mikhmon sync: ${result.created} new, ${result.updated} updated, ${result.expired} expired, ${result.failed} failed, ${result.unchanged} unchanged`,
         { level: "mikhmon" },
       );
     }
