@@ -1290,7 +1290,7 @@ function naira(amount) {
 }
 
 function planLabel(plan) {
-    const labels = { '24hr': 'Daily', '3d': '3-Day', '5d': '5-Day', '7d': 'Weekly', '14d': '2-Week', '30d': 'Monthly' };
+    const labels = { '24hr': 'Daily', '3d': '3-Day', '5d': '5-Day', '7d': 'Weekly', '14d': '2-Week', '30d': 'Monthly', 'mikhmon': 'Mikhmon' };
     return labels[plan] || plan || 'Unknown';
 }
 
@@ -2041,6 +2041,8 @@ function renderDashboard(data) {
         .tag-7d { background: var(--gold-soft); color: var(--gold); }
         .tag-14d { background: var(--warning-bg); color: var(--warning); }
         .tag-30d { background: rgba(236, 72, 153, 0.12); color: #ec4899; }
+        .tag-mikhmon { background: rgba(148, 163, 184, 0.14); color: #94a3b8; }
+        tr[data-status="active"] td { background: rgba(16, 185, 129, 0.06); }
         .search-wrap { position: relative; min-width: 240px; }
         .search-wrap i { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 14px; }
         .search-input { width: 100%; padding: 11px 16px 11px 40px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary); font-size: 14px; transition: all 0.2s; }
