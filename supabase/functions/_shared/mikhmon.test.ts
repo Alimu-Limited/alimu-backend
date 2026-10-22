@@ -196,11 +196,18 @@ Deno.test("dry-run writes nothing", async () => {
   assertEquals(db.ops.length, 0);
 });
 
-Deno.test("disabled active user is inserted as expired", async () => {
+Deno.test("6-Hours and default are never shown, even after login", async () => {
   const db = new FakeDb();
-  await syncMikhmonUsers(db, [
-    { name: "dead", password: "dead", profile: "24hrs", disabled: "true" },
-  ], { firstLoginOnly: true, active: ["dead"] });
-  assertEquals(db.tables.payment_queue[0].status, "expired");
+  const res = await syncMikhmonUsers(db, [
+    { name: "six", password: "six", profile: "6-Hours", comment: "2026-10-22 18:22:00" },
+    { name: "def", password: "def", profile: "default", comment: "2026-10-22 18:22:00" },
+    { name: "day", password: "day", profile: "24hr", comment: "2026-10-22 18:22:00" },
+  ], { firstLoginOnly: true, active: ["six", "def", "day"] });
+
+  assertEquals(res.eligible, 1);
+  assertEquals(res.skipped, 2);
+  assertEquals(res.created, 1);
+  assertEquals(res.names, ["day"]);
+  assertEquals(db.tables.payment_queue.map((r) => r.mikrotik_username), ["day"]);
 });
 

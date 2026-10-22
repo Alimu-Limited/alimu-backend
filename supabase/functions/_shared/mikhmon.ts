@@ -102,6 +102,8 @@ export function toMikhmonRow(input: MikhmonUserInput): MikhmonRow | null {
   };
 }
 
+const PAID_PLANS = new Set(["24hr", "3d", "5d", "7d", "14d", "30d"]);
+
 /**
  * Inserts/updates eligible Mikhmon users. Never deletes: logout keeps the row,
  * and the dashboard turns it EXPIRED when expires_at passes.
@@ -113,9 +115,12 @@ export async function syncMikhmonUsers(
 ): Promise<MikhmonSyncResult> {
   const activeSet = new Set((opts.active ?? []).map((x) => String(x)));
   const candidates = users.map(toMikhmonRow).filter((r): r is MikhmonRow => r !== null);
+  // Only paid plans are allowed on the dashboard. 6-Hours, default and any
+  // unrecognised profile are always excluded, even if the user logged in.
+  const paid = candidates.filter((r) => PAID_PLANS.has(r.plan));
   const rows = opts.firstLoginOnly
-    ? candidates.filter((r) => activeSet.has(r.mikrotik_username) || r.expires_at !== null)
-    : candidates;
+    ? paid.filter((r) => activeSet.has(r.mikrotik_username) || r.expires_at !== null)
+    : paid;
   const names = rows.map((r) => r.mikrotik_username);
   const result: MikhmonSyncResult = {
     received: users.length,
