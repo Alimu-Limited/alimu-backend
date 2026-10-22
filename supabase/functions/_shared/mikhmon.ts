@@ -37,6 +37,7 @@ export interface MikhmonSyncResult {
   updated: number;
   unchanged: number;
   expired: number;
+  removed: number;
   failed: number;
   names: string[];
 }
@@ -110,7 +111,7 @@ export function toMikhmonRow(input: MikhmonUserInput): MikhmonRow | null {
 export async function syncMikhmonUsers(
   sb: any,
   users: MikhmonUserInput[],
-  opts: { dryRun?: boolean; complete?: boolean } = {},
+  opts: { dryRun?: boolean; complete?: boolean; activeOnly?: boolean } = {},
 ): Promise<MikhmonSyncResult> {
   const rows = users.map(toMikhmonRow).filter((r): r is MikhmonRow => r !== null);
   const names = rows.map((r) => r.mikrotik_username);
@@ -121,6 +122,7 @@ export async function syncMikhmonUsers(
     updated: 0,
     unchanged: 0,
     expired: 0,
+    removed: 0,
     failed: 0,
     names,
   };
@@ -169,16 +171,21 @@ export async function syncMikhmonUsers(
     }
   }
 
-  if (opts.complete && rows.length > 0) {
+  const shouldPrune = opts.complete && (opts.activeOnly || rows.length > 0);
+  if (shouldPrune) {
     const { data: all, error } = await sb
       .from("payment_queue")
-      .select("id, mikrotik_username")
-      .like("transaction_id", "mikhmon-%")
-      .eq("status", "processed");
+      .select("id, mikrotik_username, status")
+      .like("transaction_id", "mikhmon-%");
     if (!error) {
       const keep = new Set(names);
       for (const row of all ?? []) {
-        if (!keep.has(String(row.mikrotik_username ?? ""))) {
+        if (keep.has(String(row.mikrotik_username ?? ""))) continue;
+        if (opts.activeOnly) {
+          // Active-only view: once the session is gone the row disappears.
+          const { error: deleteError } = await sb.from("payment_queue").delete().eq("id", row.id);
+          if (!deleteError) result.removed++;
+        } else if (String(row.status) === "processed") {
           const { error: updateError } = await sb
             .from("payment_queue")
             .update({ status: "expired" })

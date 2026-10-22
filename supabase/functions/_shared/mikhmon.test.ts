@@ -74,12 +74,16 @@ class Query {
   eq(col: string, val: unknown) { this.eqs.push([col, val]); return this; }
   update(row: any) { this.mode = "update"; this.payload = row; return this; }
   insert(row: any) { this.mode = "insert"; this.payload = row; return this; }
+  delete() { this.mode = "delete"; return this; }
 
   then(resolve: (value: any) => void) {
     if (this.mode === "select") {
       resolve({ data: this.db.select(this.table, this.eqs, this.likes), error: null });
     } else if (this.mode === "insert") {
       this.db.insert(this.table, this.payload);
+      resolve({ error: null });
+    } else if (this.mode === "delete") {
+      this.db.delete(this.table, this.eqs);
       resolve({ error: null });
     } else {
       this.db.update(this.table, this.payload, this.eqs);
@@ -125,6 +129,11 @@ class FakeDb {
     for (const existing of this.tables[table]) {
       if (idFilter === undefined || existing.id === idFilter) Object.assign(existing, row);
     }
+  }
+  delete(table: string, eqs: Array<[string, unknown]>) {
+    const idFilter = eqs.find(([col]) => col === "id")?.[1];
+    this.ops.push({ type: "delete", row: { id: idFilter } });
+    this.tables[table] = this.tables[table].filter((row) => row.id !== idFilter);
   }
 }
 
@@ -205,5 +214,53 @@ Deno.test("second identical sync changes nothing", async () => {
   assertEquals(second.updated, 0);
   assertEquals(second.unchanged, 1);
   assertEquals(db.ops.filter((o) => o.type === "insert").length, 1);
+});
+
+Deno.test("active-only sync removes users that are no longer online", async () => {
+  const db = new FakeDb();
+  db.tables.payment_queue.push(
+    {
+      id: 1,
+      transaction_id: "mikhmon-live",
+      mikrotik_username: "live",
+      mikrotik_password: "p",
+      plan: "mikhmon",
+      mac_address: "",
+      status: "processed",
+      expires_at: null,
+      customer_email: "Mikhmon (24hr)",
+      customer_phone: "Mikhmon",
+    },
+    { id: 2, transaction_id: "mikhmon-off", mikrotik_username: "off", status: "processed" },
+    { id: 3, transaction_id: "pay-1", mikrotik_username: "paid", status: "processed" },
+  );
+
+  const res = await syncMikhmonUsers(
+    db,
+    [{ name: "live", password: "p", profile: "24hrs", comment: "" }],
+    { complete: true, activeOnly: true },
+  );
+
+  assertEquals(res.unchanged, 1);
+  assertEquals(res.updated, 0);
+  assertEquals(res.removed, 1);
+  assertEquals(db.tables.payment_queue.some((r) => r.transaction_id === "mikhmon-off"), false);
+  assertEquals(db.tables.payment_queue.some((r) => r.transaction_id === "mikhmon-live"), true);
+  assertEquals(db.tables.payment_queue.some((r) => r.transaction_id === "pay-1"), true);
+});
+
+Deno.test("active-only sync with an empty online list removes every Mikhmon row", async () => {
+  const db = new FakeDb();
+  db.tables.payment_queue.push(
+    { id: 1, transaction_id: "mikhmon-a", mikrotik_username: "a", status: "processed" },
+    { id: 2, transaction_id: "mikhmon-b", mikrotik_username: "b", status: "expired" },
+    { id: 3, transaction_id: "pay-1", mikrotik_username: "paid", status: "processed" },
+  );
+
+  const res = await syncMikhmonUsers(db, [], { complete: true, activeOnly: true });
+
+  assertEquals(res.removed, 2);
+  assertEquals(db.tables.payment_queue.some((r) => String(r.transaction_id).startsWith("mikhmon-")), false);
+  assertEquals(db.tables.payment_queue.some((r) => r.transaction_id === "pay-1"), true);
 });
 
