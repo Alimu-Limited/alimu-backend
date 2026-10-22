@@ -78,8 +78,15 @@ export function parseMikhmonExpiry(comment: unknown): string | null {
 
 /** RouterOS duration -> seconds ("1d00:00:00", "00:06:02", "1d", "0s"). */
 export function routerSeconds(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.floor(value));
   const raw = String(value ?? "").trim();
   if (!raw) return null;
+  // RouterOS :serialize turns a time limit into an epoch date ("1970-01-02 00:00:00").
+  const epoch = raw.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/);
+  if (epoch) {
+    const t = Date.parse(`${epoch[1]}-${epoch[2]}-${epoch[3]}T${epoch[4]}:${epoch[5]}:${epoch[6]}Z`);
+    return Number.isNaN(t) ? null : Math.floor(t / 1000);
+  }
   const clock = raw.match(/^(?:(\d+)w)?(?:(\d+)d)?(\d{1,2}):(\d{2}):(\d{2})$/);
   if (clock) {
     return (Number(clock[1] ?? 0) * 604800) + (Number(clock[2] ?? 0) * 86400) +

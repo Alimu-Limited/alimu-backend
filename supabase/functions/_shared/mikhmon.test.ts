@@ -202,6 +202,8 @@ Deno.test("routerSeconds parses RouterOS durations", () => {
   assertEquals(routerSeconds("00:06:02"), 362);
   assertEquals(routerSeconds("1d"), 86400);
   assertEquals(routerSeconds("1w2d3h"), 788400);
+  assertEquals(routerSeconds("1970-01-02 00:00:00"), 86400);
+  assertEquals(routerSeconds(86400), 86400);
   assertEquals(routerSeconds("0s"), 0);
   assertEquals(routerSeconds(""), null);
   assertEquals(routerSeconds("junk"), null);
