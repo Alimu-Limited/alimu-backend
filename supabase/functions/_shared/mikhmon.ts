@@ -1,10 +1,13 @@
 /**
  * Mikhmon (manual hotspot voucher) -> payment_queue sync.
  *
- * Manual users exist only on the router. Mikhmon never writes to the backend,
- * so the admin dashboards (which read payment_queue) cannot see them until the
- * router pushes them here. This module is deliberately database-only and free
- * of Deno globals so it can be unit-tested without a live Supabase project.
+ * Rule: a manual voucher appears on the dashboard after its FIRST login and
+ * then stays there until its expiry. Unused vouchers never appear. Logging out
+ * does not remove the row.
+ *
+ * The router sends all Mikhmon-pattern users plus the active-session list.
+ * A user is eligible when they are active now OR their comment already carries
+ * an expiry timestamp (written by Mikhmon's on-login script on first login).
  */
 
 export interface MikhmonUserInput {
@@ -32,12 +35,11 @@ export interface MikhmonRow {
 
 export interface MikhmonSyncResult {
   received: number;
-  valid: number;
+  eligible: number;
+  skipped: number;
   created: number;
   updated: number;
   unchanged: number;
-  expired: number;
-  removed: number;
   failed: number;
   names: string[];
 }
@@ -51,14 +53,13 @@ export function mapMikhmonPlan(profile: unknown): string {
   if (["7d", "7day", "7days", "7-day", "7-days", "1w", "weekly"].includes(p)) return "7d";
   if (["14d", "14day", "14days", "14-day", "14-days", "2w"].includes(p)) return "14d";
   if (["30d", "30day", "30days", "30-day", "30-days", "4w2d", "monthly"].includes(p)) return "30d";
-  // Unknown/manual profiles stay visibly separate and are not counted as revenue.
   return "mikhmon";
 }
 
 /**
- * Mikhmon writes an expiry timestamp into the user comment when a voucher logs
- * in (e.g. "2026-10-22 18:22:00"). Voucher-code comments and empty comments
- * have no usable expiry and return null (never auto-expire in the dashboard).
+ * Mikhmon writes an expiry timestamp into the user comment on first login
+ * (e.g. "2026-10-22 18:22:00"). Voucher-code comments such as
+ * "vc-137-10.22.26-4GBProfile" have no usable expiry and return null.
  */
 export function parseMikhmonExpiry(comment: unknown): string | null {
   const text = String(comment ?? "");
@@ -66,7 +67,6 @@ export function parseMikhmonExpiry(comment: unknown): string | null {
   if (!m) return null;
   const year = Number(m[1]);
   if (year < 2020 || year > 2100) return null;
-  // Africa/Lagos is UTC+01:00 and has no DST.
   const d = new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}+01:00`);
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
@@ -81,9 +81,8 @@ export function toMikhmonRow(input: MikhmonUserInput): MikhmonRow | null {
   const disabled = String(input?.disabled ?? "").toLowerCase() === "true" ||
     String(input?.["limit-uptime"] ?? "") === "1s";
 
-  // Keep manual users OUT of the paid-plan revenue totals. The actual Mikhmon
-  // profile is shown in the contact line, while the dashboard plan tag stays
-  // "Mikhmon" so SUM(CASE plan ...) cannot invent revenue.
+  // Keep manual users OUT of paid-plan revenue. The real Mikhmon profile is
+  // shown in the contact line; the plan tag stays "Mikhmon".
   const mapped = mapMikhmonPlan(input?.profile);
   const contact = mapped === "mikhmon" ? "Mikhmon" : `Mikhmon (${mapped})`;
 
@@ -101,28 +100,27 @@ export function toMikhmonRow(input: MikhmonUserInput): MikhmonRow | null {
 }
 
 /**
- * Upserts manual users into payment_queue. No schema change: the dashboards
- * already read this table, so a processed row appears immediately and green.
- *
- * `complete: true` means the router enumerated its full user list; only then
- * are Mikhmon rows missing from the payload marked expired. This prevents a
- * truncated/partial push from expiring everybody.
+ * Inserts/updates eligible Mikhmon users. Never deletes: logout keeps the row,
+ * and the dashboard turns it EXPIRED when expires_at passes.
  */
 export async function syncMikhmonUsers(
   sb: any,
   users: MikhmonUserInput[],
-  opts: { dryRun?: boolean; complete?: boolean; activeOnly?: boolean } = {},
+  opts: { dryRun?: boolean; firstLoginOnly?: boolean; active?: string[] } = {},
 ): Promise<MikhmonSyncResult> {
-  const rows = users.map(toMikhmonRow).filter((r): r is MikhmonRow => r !== null);
+  const activeSet = new Set((opts.active ?? []).map((x) => String(x)));
+  const candidates = users.map(toMikhmonRow).filter((r): r is MikhmonRow => r !== null);
+  const rows = opts.firstLoginOnly
+    ? candidates.filter((r) => activeSet.has(r.mikrotik_username) || r.expires_at !== null)
+    : candidates;
   const names = rows.map((r) => r.mikrotik_username);
   const result: MikhmonSyncResult = {
     received: users.length,
-    valid: rows.length,
+    eligible: rows.length,
+    skipped: candidates.length - rows.length,
     created: 0,
     updated: 0,
     unchanged: 0,
-    expired: 0,
-    removed: 0,
     failed: 0,
     names,
   };
@@ -168,31 +166,6 @@ export async function syncMikhmonUsers(
       const { error } = await sb.from("payment_queue").insert(row);
       if (error) result.failed++;
       else result.created++;
-    }
-  }
-
-  const shouldPrune = opts.complete && (opts.activeOnly || rows.length > 0);
-  if (shouldPrune) {
-    const { data: all, error } = await sb
-      .from("payment_queue")
-      .select("id, mikrotik_username, status")
-      .like("transaction_id", "mikhmon-%");
-    if (!error) {
-      const keep = new Set(names);
-      for (const row of all ?? []) {
-        if (keep.has(String(row.mikrotik_username ?? ""))) continue;
-        if (opts.activeOnly) {
-          // Active-only view: once the session is gone the row disappears.
-          const { error: deleteError } = await sb.from("payment_queue").delete().eq("id", row.id);
-          if (!deleteError) result.removed++;
-        } else if (String(row.status) === "processed") {
-          const { error: updateError } = await sb
-            .from("payment_queue")
-            .update({ status: "expired" })
-            .eq("id", row.id);
-          if (!updateError) result.expired++;
-        }
-      }
     }
   }
 

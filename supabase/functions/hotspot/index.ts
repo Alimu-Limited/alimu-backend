@@ -390,18 +390,22 @@ async function mikhmonSync(req: Request): Promise<Response> {
   if (!body || !Array.isArray(body.users)) {
     return json({ success: false, error: "users array required" }, 400);
   }
-  if (body.mode !== "active") {
-    return json({ success: false, error: "mode=active required" }, 400);
+  if (body.mode !== "first-login") {
+    return json({ success: false, error: "mode=first-login required" }, 400);
   }
+  const active = Array.isArray(body.active) ? body.active.map(String) : [];
   const dryRun = queryParams(req).get("dry") === "1";
-  const complete = body.complete === true;
   try {
-    const result = await syncMikhmonUsers(getSupabase(), body.users, { dryRun, complete, activeOnly: true });
-    const changed = result.created + result.updated + result.expired + result.removed + result.failed;
+    const result = await syncMikhmonUsers(getSupabase(), body.users, {
+      dryRun,
+      firstLoginOnly: true,
+      active,
+    });
+    const changed = result.created + result.updated + result.failed;
     if (!dryRun && changed > 0) {
       await logActivity(
         "mikhmon",
-        `Mikhmon active sync: ${result.created} new, ${result.updated} updated, ${result.removed} removed, ${result.failed} failed, ${result.unchanged} unchanged`,
+        `Mikhmon sync: ${result.created} new, ${result.updated} updated, ${result.skipped} not yet logged in, ${result.failed} failed, ${result.unchanged} unchanged`,
         { level: "mikhmon" },
       );
     }

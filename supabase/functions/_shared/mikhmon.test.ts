@@ -15,31 +15,29 @@ Deno.test("mapMikhmonPlan maps every Mikhmon voucher profile", () => {
   assertEquals(mapMikhmonPlan("30-Days"), "30d");
   assertEquals(mapMikhmonPlan("daily"), "24hr");
   assertEquals(mapMikhmonPlan("default"), "mikhmon");
-  assertEquals(mapMikhmonPlan(""), "mikhmon");
 });
 
-Deno.test("parseMikhmonExpiry handles timestamps and refuses junk", () => {
+Deno.test("parseMikhmonExpiry handles timestamps and refuses voucher codes", () => {
   assertEquals(parseMikhmonExpiry("2026-10-22 18:22:00"), "2026-10-22T17:22:00.000Z");
   assertEquals(parseMikhmonExpiry("2026-10-22T18:22:00"), "2026-10-22T17:22:00.000Z");
-  assertEquals(parseMikhmonExpiry("vc-591-10.20.26-24"), null);
+  assertEquals(parseMikhmonExpiry("vc-137-10.22.26-4GBProfile"), null);
   assertEquals(parseMikhmonExpiry(""), null);
   assertEquals(parseMikhmonExpiry("2026-13-40 99:99:99"), null);
 });
 
-Deno.test("toMikhmonRow builds a safe payment_queue row", () => {
+Deno.test("toMikhmonRow builds a safe, revenue-neutral row", () => {
   const row = toMikhmonRow({
-    name: "mktabc123",
-    password: "pass1234",
+    name: "ALMv3hkc",
+    password: "ALMv3hkc",
     profile: "24hrs",
     "mac-address": "aa:bb:cc:dd:ee:ff",
     comment: "2026-10-22 18:22:00",
   })!;
-  assertEquals(row.transaction_id, "mikhmon-mktabc123");
+  assertEquals(row.transaction_id, "mikhmon-ALMv3hkc");
   assertEquals(row.customer_email, "Mikhmon (24hr)");
   assertEquals(row.customer_phone, "Mikhmon");
   assertEquals(row.plan, "mikhmon");
-  assertEquals(row.mikrotik_username, "mktabc123");
-  assertEquals(row.mikrotik_password, "pass1234");
+  assertEquals(row.mikrotik_password, "ALMv3hkc");
   assertEquals(row.mac_address, "AA:BB:CC:DD:EE:FF");
   assertEquals(row.status, "processed");
   assertEquals(row.expires_at, "2026-10-22T17:22:00.000Z");
@@ -74,16 +72,12 @@ class Query {
   eq(col: string, val: unknown) { this.eqs.push([col, val]); return this; }
   update(row: any) { this.mode = "update"; this.payload = row; return this; }
   insert(row: any) { this.mode = "insert"; this.payload = row; return this; }
-  delete() { this.mode = "delete"; return this; }
 
   then(resolve: (value: any) => void) {
     if (this.mode === "select") {
       resolve({ data: this.db.select(this.table, this.eqs, this.likes), error: null });
     } else if (this.mode === "insert") {
       this.db.insert(this.table, this.payload);
-      resolve({ error: null });
-    } else if (this.mode === "delete") {
-      this.db.delete(this.table, this.eqs);
       resolve({ error: null });
     } else {
       this.db.update(this.table, this.payload, this.eqs);
@@ -130,137 +124,80 @@ class FakeDb {
       if (idFilter === undefined || existing.id === idFilter) Object.assign(existing, row);
     }
   }
-  delete(table: string, eqs: Array<[string, unknown]>) {
-    const idFilter = eqs.find(([col]) => col === "id")?.[1];
-    this.ops.push({ type: "delete", row: { id: idFilter } });
-    this.tables[table] = this.tables[table].filter((row) => row.id !== idFilter);
-  }
 }
 
-Deno.test("sync creates new users, updates existing, expires missing only when complete", async () => {
+const VOUCHER_COMMENT = "vc-137-10.22.26-4GBProfile";
+
+Deno.test("first-login sync: unused vouchers skipped; active and previously-logged users inserted", async () => {
   const db = new FakeDb();
-  db.tables.payment_queue.push(
-    { id: 1, transaction_id: "mikhmon-old", mikrotik_username: "old", status: "processed" },
-    { id: 2, transaction_id: "mikhmon-gone", mikrotik_username: "gone", status: "processed" },
-    { id: 3, transaction_id: "pay-1", mikrotik_username: "paid", status: "processed" },
-  );
-
   const res = await syncMikhmonUsers(db, [
-    { name: "old", password: "p1", profile: "3-Days", comment: "" },
-    { name: "new", password: "p2", profile: "7-Days", comment: "2026-10-22 18:22:00" },
-  ], { complete: true });
+    { name: "unused", password: "unused", profile: "24hrs", comment: VOUCHER_COMMENT },
+    { name: "active", password: "active", profile: "24hrs", comment: VOUCHER_COMMENT },
+    { name: "logged", password: "logged", profile: "24hrs", comment: "2026-10-22 18:22:00" },
+  ], { firstLoginOnly: true, active: ["active"] });
 
-  assertEquals(res.updated, 1);
-  assertEquals(res.created, 1);
-  assertEquals(res.expired, 1);
+  assertEquals(res.received, 3);
+  assertEquals(res.eligible, 2);
+  assertEquals(res.skipped, 1);
+  assertEquals(res.created, 2);
   assertEquals(res.failed, 0);
 
-  const newRow = db.tables.payment_queue.find((r) => r.transaction_id === "mikhmon-new")!;
-  assertEquals(newRow.customer_email, "Mikhmon (7d)");
-  assertEquals(newRow.customer_phone, "Mikhmon");
-  assertEquals(newRow.plan, "mikhmon");
-  assertEquals(newRow.status, "processed");
-  assertEquals(newRow.expires_at, "2026-10-22T17:22:00.000Z");
-
-  const gone = db.tables.payment_queue.find((r) => r.transaction_id === "mikhmon-gone")!;
-  assertEquals(gone.status, "expired");
-  const paid = db.tables.payment_queue.find((r) => r.transaction_id === "pay-1")!;
-  assertEquals(paid.status, "processed");
+  const names = db.tables.payment_queue.map((r) => r.mikrotik_username).sort();
+  assertEquals(names, ["active", "logged"]);
+  assertEquals(db.tables.payment_queue.every((r) => r.plan === "mikhmon"), true);
+  assertEquals(db.tables.payment_queue.every((r) => r.customer_phone === "Mikhmon"), true);
+  assert(db.tables.payment_queue.some((r) => r.customer_email === "Mikhmon (24hr)"));
 });
 
-Deno.test("sync dry-run writes nothing", async () => {
+Deno.test("logged-out users stay in the table; nothing is pruned", async () => {
   const db = new FakeDb();
-  const res = await syncMikhmonUsers(db, [{ name: "u1", profile: "24hrs" }], { dryRun: true });
-  assertEquals(res.valid, 1);
-  assertEquals(res.created, 0);
-  assertEquals(db.ops.length, 0);
-});
+  db.tables.payment_queue.push({
+    id: 1,
+    transaction_id: "mikhmon-old",
+    mikrotik_username: "old",
+    mikrotik_password: "old",
+    plan: "mikhmon",
+    mac_address: "",
+    status: "processed",
+    expires_at: null,
+    customer_email: "Mikhmon (24hr)",
+    customer_phone: "Mikhmon",
+  });
 
-Deno.test("sync without complete never expires missing users", async () => {
-  const db = new FakeDb();
-  db.tables.payment_queue.push(
-    { id: 1, transaction_id: "mikhmon-gone", mikrotik_username: "gone", status: "processed" },
-  );
-  const res = await syncMikhmonUsers(db, [{ name: "new" }], { complete: false });
-  assertEquals(res.expired, 0);
-  assertEquals(db.tables.payment_queue[0].status, "processed");
-});
+  await syncMikhmonUsers(db, [
+    { name: "active", password: "active", profile: "24hrs", comment: VOUCHER_COMMENT },
+  ], { firstLoginOnly: true, active: ["active"] });
 
-Deno.test("sync with an empty complete payload does not expire everyone", async () => {
-  const db = new FakeDb();
-  db.tables.payment_queue.push(
-    { id: 1, transaction_id: "mikhmon-a", mikrotik_username: "a", status: "processed" },
-  );
-  const res = await syncMikhmonUsers(db, [], { complete: true });
-  assertEquals(res.expired, 0);
-  assertEquals(db.tables.payment_queue[0].status, "processed");
-});
-
-Deno.test("sync sends disabled users as expired", async () => {
-  const db = new FakeDb();
-  await syncMikhmonUsers(db, [{ name: "dead", disabled: "true" }], { complete: true });
-  const row = db.tables.payment_queue.find((r) => r.transaction_id === "mikhmon-dead")!;
-  assertEquals(row.status, "expired");
-  assert(db.ops.some((o) => o.type === "insert"));
+  assertEquals(db.tables.payment_queue.some((r) => r.transaction_id === "mikhmon-old"), true);
 });
 
 Deno.test("second identical sync changes nothing", async () => {
   const db = new FakeDb();
-  const users = [{ name: "u1", password: "p1", profile: "24hrs", comment: "" }];
-  const first = await syncMikhmonUsers(db, users, { complete: true });
-  const second = await syncMikhmonUsers(db, users, { complete: true });
+  const users = [
+    { name: "active", password: "active", profile: "24hrs", comment: "2026-10-22 18:22:00" },
+  ];
+  const first = await syncMikhmonUsers(db, users, { firstLoginOnly: true, active: ["active"] });
+  const second = await syncMikhmonUsers(db, users, { firstLoginOnly: true, active: ["active"] });
   assertEquals(first.created, 1);
   assertEquals(second.created, 0);
   assertEquals(second.updated, 0);
   assertEquals(second.unchanged, 1);
-  assertEquals(db.ops.filter((o) => o.type === "insert").length, 1);
 });
 
-Deno.test("active-only sync removes users that are no longer online", async () => {
+Deno.test("dry-run writes nothing", async () => {
   const db = new FakeDb();
-  db.tables.payment_queue.push(
-    {
-      id: 1,
-      transaction_id: "mikhmon-live",
-      mikrotik_username: "live",
-      mikrotik_password: "p",
-      plan: "mikhmon",
-      mac_address: "",
-      status: "processed",
-      expires_at: null,
-      customer_email: "Mikhmon (24hr)",
-      customer_phone: "Mikhmon",
-    },
-    { id: 2, transaction_id: "mikhmon-off", mikrotik_username: "off", status: "processed" },
-    { id: 3, transaction_id: "pay-1", mikrotik_username: "paid", status: "processed" },
-  );
-
-  const res = await syncMikhmonUsers(
-    db,
-    [{ name: "live", password: "p", profile: "24hrs", comment: "" }],
-    { complete: true, activeOnly: true },
-  );
-
-  assertEquals(res.unchanged, 1);
-  assertEquals(res.updated, 0);
-  assertEquals(res.removed, 1);
-  assertEquals(db.tables.payment_queue.some((r) => r.transaction_id === "mikhmon-off"), false);
-  assertEquals(db.tables.payment_queue.some((r) => r.transaction_id === "mikhmon-live"), true);
-  assertEquals(db.tables.payment_queue.some((r) => r.transaction_id === "pay-1"), true);
+  const res = await syncMikhmonUsers(db, [
+    { name: "active", password: "active", profile: "24hrs", comment: VOUCHER_COMMENT },
+  ], { firstLoginOnly: true, active: ["active"], dryRun: true });
+  assertEquals(res.eligible, 1);
+  assertEquals(res.created, 0);
+  assertEquals(db.ops.length, 0);
 });
 
-Deno.test("active-only sync with an empty online list removes every Mikhmon row", async () => {
+Deno.test("disabled active user is inserted as expired", async () => {
   const db = new FakeDb();
-  db.tables.payment_queue.push(
-    { id: 1, transaction_id: "mikhmon-a", mikrotik_username: "a", status: "processed" },
-    { id: 2, transaction_id: "mikhmon-b", mikrotik_username: "b", status: "expired" },
-    { id: 3, transaction_id: "pay-1", mikrotik_username: "paid", status: "processed" },
-  );
-
-  const res = await syncMikhmonUsers(db, [], { complete: true, activeOnly: true });
-
-  assertEquals(res.removed, 2);
-  assertEquals(db.tables.payment_queue.some((r) => String(r.transaction_id).startsWith("mikhmon-")), false);
-  assertEquals(db.tables.payment_queue.some((r) => r.transaction_id === "pay-1"), true);
+  await syncMikhmonUsers(db, [
+    { name: "dead", password: "dead", profile: "24hrs", disabled: "true" },
+  ], { firstLoginOnly: true, active: ["dead"] });
+  assertEquals(db.tables.payment_queue[0].status, "expired");
 });
-
