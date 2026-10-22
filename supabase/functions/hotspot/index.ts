@@ -34,6 +34,7 @@ import {
 } from "../_shared/cors.ts";
 import { getSupabase } from "../_shared/supabase.ts";
 import { handleAdmin, licenceActive, clearLicenceCache } from "../_shared/admin.ts";
+import { syncMikhmonUsers } from "../_shared/mikhmon.ts";
 
 const PUBLIC_BASE = Deno.env.get("PUBLIC_BASE_URL") ||
   "https://scarbubwnkdxarxxdzhj.supabase.co/functions/v1/hotspot";
@@ -378,6 +379,36 @@ function checkApiKey(req: Request): boolean {
   return !!expected && key === expected;
 }
 
+/**
+ * Router -> backend sync for users created manually in Mikhmon.
+ * The router posts { users: [...], complete: true } every minute. Rows are
+ * upserted into payment_queue so both admin dashboards show them immediately.
+ * ?dry=1 validates/parses the payload without writing anything.
+ */
+async function mikhmonSync(req: Request): Promise<Response> {
+  const body = await req.json().catch(() => null);
+  if (!body || !Array.isArray(body.users)) {
+    return json({ success: false, error: "users array required" }, 400);
+  }
+  const dryRun = queryParams(req).get("dry") === "1";
+  const complete = body.complete === true;
+  try {
+    const result = await syncMikhmonUsers(getSupabase(), body.users, { dryRun, complete });
+    if (!dryRun) {
+      await logActivity(
+        "mikhmon",
+        `Mikhmon sync: ${result.created} new, ${result.updated} updated, ${result.expired} expired, ${result.failed} failed`,
+        { level: "mikhmon" },
+      );
+    }
+    return json({ success: true, dry: dryRun, ...result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Mikhmon sync failed";
+    console.error("Mikhmon sync error:", message);
+    return json({ success: false, error: message }, 500);
+  }
+}
+
 async function mikrotikQueueText(): Promise<Response> {
   const supabase = getSupabase();
   const { data, error } = await supabase
@@ -678,6 +709,12 @@ serve(async (req: Request) => {
         return json({ success: true, username });
       }
       return json({ success: false });
+    }
+
+    // Manual Mikhmon users pushed by the router (see _shared/mikhmon.ts).
+    if (path === "/api/mikhmon-sync" && method === "POST") {
+      if (!checkApiKey(req)) return json({ success: false, error: "Forbidden" }, 403);
+      return await mikhmonSync(req);
     }
 
     // ---- site subscription (developer's recurring licence) ----
