@@ -19,6 +19,7 @@ export interface MikhmonUserInput {
   comment?: unknown;
   disabled?: unknown;
   "limit-uptime"?: unknown;
+  uptime?: unknown;
 }
 
 export interface MikhmonRow {
@@ -42,6 +43,7 @@ export interface MikhmonSyncResult {
   unchanged: number;
   failed: number;
   names: string[];
+  preview: Array<{ name: string; expires_at: string | null }>;
 }
 
 /** Maps Mikhmon voucher profile names to the plan codes used by the dashboards. */
@@ -72,6 +74,23 @@ export function parseMikhmonExpiry(comment: unknown): string | null {
   if (year < 2020 || year > 2100) return null;
   const d = new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}+01:00`);
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/** RouterOS duration -> seconds ("1d00:00:00", "00:06:02", "1d", "0s"). */
+export function routerSeconds(value: unknown): number | null {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const clock = raw.match(/^(?:(\d+)w)?(?:(\d+)d)?(\d{1,2}):(\d{2}):(\d{2})$/);
+  if (clock) {
+    return (Number(clock[1] ?? 0) * 604800) + (Number(clock[2] ?? 0) * 86400) +
+      (Number(clock[3]) * 3600) + (Number(clock[4]) * 60) + Number(clock[5]);
+  }
+  const units = raw.match(/^(?:(\d+)w)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/);
+  if (units && /[wdhms]/.test(raw)) {
+    return (Number(units[1] ?? 0) * 604800) + (Number(units[2] ?? 0) * 86400) +
+      (Number(units[3] ?? 0) * 3600) + (Number(units[4] ?? 0) * 60) + Number(units[5] ?? 0);
+  }
+  return null;
 }
 
 export function toMikhmonRow(input: MikhmonUserInput): MikhmonRow | null {
@@ -131,13 +150,14 @@ export async function syncMikhmonUsers(
     unchanged: 0,
     failed: 0,
     names,
+    preview: [],
   };
 
   if (opts.dryRun) return result;
 
   const { data: existing, error: readError } = await sb
     .from("payment_queue")
-    .select("id, transaction_id, mikrotik_password, plan, mac_address, status, expires_at, customer_email, customer_phone")
+    .select("id, transaction_id, mikrotik_password, plan, mac_address, status, expires_at, created_at, customer_email, customer_phone")
     .like("transaction_id", "mikhmon-%");
   if (readError) throw new Error(readError.message || "Failed to read existing Mikhmon users");
 
@@ -152,30 +172,72 @@ export async function syncMikhmonUsers(
     return !Number.isNaN(ta) && !Number.isNaN(tb) && ta === tb;
   };
 
+  const inputs = new Map<string, MikhmonUserInput>();
+  for (const user of users) {
+    const n = String(user?.name ?? "");
+    if (n) inputs.set(n, user);
+  }
+  const preview: Array<{ name: string; expires_at: string | null }> = [];
+  const applied = new Set<string>();
+
   for (const row of rows) {
+    const input = inputs.get(row.mikrotik_username);
     const old = byTx.get(row.transaction_id);
+    let expires = row.expires_at;
+    // Never clear an expiry we already stored, and never extend it on a later
+    // login: only the first login (or a timestamp written by Mikhmon) sets it.
+    if (!expires && old?.expires_at) expires = String(old.expires_at);
+    if (!expires) {
+      const limit = routerSeconds(input?.["limit-uptime"]);
+      const uptime = routerSeconds(input?.uptime);
+      if (limit !== null && uptime !== null && limit > 0) {
+        expires = new Date(Date.now() + Math.max(0, limit - uptime) * 1000).toISOString();
+      }
+    }
+    const nextRow = { ...row, expires_at: expires };
+    if (nextRow.expires_at) applied.add(row.transaction_id);
+    if (preview.length < 5) preview.push({ name: row.mikrotik_username, expires_at: expires });
+
     if (old) {
       const unchanged =
-        String(old.mikrotik_password ?? "") === row.mikrotik_password &&
-        String(old.plan ?? "") === row.plan &&
-        String(old.mac_address ?? "") === row.mac_address &&
-        String(old.status ?? "") === row.status &&
-        String(old.customer_email ?? "") === row.customer_email &&
-        String(old.customer_phone ?? "") === row.customer_phone &&
-        sameDate(old.expires_at, row.expires_at);
+        String(old.mikrotik_password ?? "") === nextRow.mikrotik_password &&
+        String(old.plan ?? "") === nextRow.plan &&
+        String(old.mac_address ?? "") === nextRow.mac_address &&
+        String(old.status ?? "") === nextRow.status &&
+        String(old.customer_email ?? "") === nextRow.customer_email &&
+        String(old.customer_phone ?? "") === nextRow.customer_phone &&
+        sameDate(old.expires_at, nextRow.expires_at);
       if (unchanged) {
         result.unchanged++;
         continue;
       }
-      const { error } = await sb.from("payment_queue").update(row).eq("id", old.id);
+      const { error } = await sb.from("payment_queue").update(nextRow).eq("id", old.id);
       if (error) result.failed++;
       else result.updated++;
     } else {
-      const { error } = await sb.from("payment_queue").insert(row);
+      const { error } = await sb.from("payment_queue").insert(nextRow);
       if (error) result.failed++;
       else result.created++;
     }
   }
 
+  // Backfill rows whose first sync happened before the expiry was known (the
+  // router on-login comment was not written). First seen + plan duration.
+  for (const old of existing ?? []) {
+    if (old.expires_at || applied.has(String(old.transaction_id))) continue;
+    if (!old.created_at) continue;
+    const input = inputs.get(String(old.mikrotik_username ?? ""));
+    if (!input) continue;
+    const limit = routerSeconds(input["limit-uptime"]);
+    if (limit === null || limit <= 0) continue;
+    const expires = new Date(new Date(String(old.created_at)).getTime() + limit * 1000).toISOString();
+    const { error } = await sb.from("payment_queue").update({ expires_at: expires }).eq("id", old.id);
+    if (!error) {
+      result.updated++;
+      if (preview.length < 5) preview.push({ name: String(old.mikrotik_username ?? ""), expires_at: expires });
+    }
+  }
+
+  result.preview = preview;
   return result;
 }

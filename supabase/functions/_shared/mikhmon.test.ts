@@ -2,6 +2,7 @@
 import {
   mapMikhmonPlan,
   parseMikhmonExpiry,
+  routerSeconds,
   syncMikhmonUsers,
   toMikhmonRow,
 } from "./mikhmon.ts";
@@ -196,6 +197,41 @@ Deno.test("dry-run writes nothing", async () => {
   assertEquals(db.ops.length, 0);
 });
 
+Deno.test("routerSeconds parses RouterOS durations", () => {
+  assertEquals(routerSeconds("1d00:00:00"), 86400);
+  assertEquals(routerSeconds("00:06:02"), 362);
+  assertEquals(routerSeconds("1d"), 86400);
+  assertEquals(routerSeconds("1w2d3h"), 788400);
+  assertEquals(routerSeconds("0s"), 0);
+  assertEquals(routerSeconds(""), null);
+  assertEquals(routerSeconds("junk"), null);
+});
+
+Deno.test("first login derives expiry from limit-uptime and never extends it", async () => {
+  const db = new FakeDb();
+  const user = {
+    name: "v",
+    password: "v",
+    profile: "24hr",
+    comment: VOUCHER_COMMENT,
+    "limit-uptime": "1d00:00:00",
+    uptime: "06:00:00",
+  };
+  const first = await syncMikhmonUsers(db, [user], { firstLoginOnly: true, active: ["v"] });
+  assertEquals(first.created, 1);
+  const exp1 = db.tables.payment_queue[0].expires_at as string;
+  assert(exp1);
+  assert(new Date(exp1).getTime() > Date.now() + 17 * 3600 * 1000);
+  assertEquals(first.preview[0].expires_at, exp1);
+
+  const second = await syncMikhmonUsers(db, [{ ...user, uptime: "00:00:01" }], {
+    firstLoginOnly: true,
+    active: ["v"],
+  });
+  assertEquals(second.unchanged, 1);
+  assertEquals(db.tables.payment_queue[0].expires_at, exp1);
+});
+
 Deno.test("6-Hours and default are never shown, even after login", async () => {
   const db = new FakeDb();
   const res = await syncMikhmonUsers(db, [
@@ -209,5 +245,35 @@ Deno.test("6-Hours and default are never shown, even after login", async () => {
   assertEquals(res.created, 1);
   assertEquals(res.names, ["day"]);
   assertEquals(db.tables.payment_queue.map((r) => r.mikrotik_username), ["day"]);
+});
+
+Deno.test("backfills expiry for an existing row from first-seen plus plan duration", async () => {
+  const db = new FakeDb();
+  db.tables.payment_queue.push({
+    id: 1,
+    transaction_id: "mikhmon-off",
+    mikrotik_username: "off",
+    mikrotik_password: "off",
+    plan: "24hr",
+    mac_address: "",
+    status: "processed",
+    expires_at: null,
+    created_at: "2026-10-22T10:00:00.000Z",
+    customer_email: "Mikhmon (24hr)",
+    customer_phone: "Mikhmon",
+  });
+  const res = await syncMikhmonUsers(db, [
+    {
+      name: "off",
+      password: "off",
+      profile: "24hrs",
+      comment: VOUCHER_COMMENT,
+      "limit-uptime": "1d00:00:00",
+    },
+  ], { firstLoginOnly: true, active: [] });
+
+  assertEquals(res.updated, 1);
+  assertEquals(db.tables.payment_queue[0].expires_at, "2026-10-23T10:00:00.000Z");
+  assertEquals(res.preview[0].expires_at, "2026-10-23T10:00:00.000Z");
 });
 

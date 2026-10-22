@@ -227,7 +227,7 @@ export async function handleAdmin(req: Request, path: string): Promise<Response>
     const perPage = 100;
     const from = (page - 1) * perPage;
     let query = getSupabase().from("payment_queue")
-      .select("id, mikrotik_username, mikrotik_password, plan, status, mac_address, customer_email, expires_at, created_at", { count: "exact" })
+      .select("id, transaction_id, mikrotik_username, mikrotik_password, plan, status, mac_address, customer_email, expires_at, created_at", { count: "exact" })
       .order("created_at", { ascending: false })
       .range(from, from + perPage - 1);
     if (status && status !== "all") query = query.eq("status", status);
