@@ -14,7 +14,9 @@ Deno.test("mapMikhmonPlan maps every Mikhmon voucher profile", () => {
   assertEquals(mapMikhmonPlan("14-Days"), "14d");
   assertEquals(mapMikhmonPlan("30-Days"), "30d");
   assertEquals(mapMikhmonPlan("daily"), "24hr");
-  assertEquals(mapMikhmonPlan("default"), "mikhmon");
+  assertEquals(mapMikhmonPlan("6-Hours"), "6h");
+  assertEquals(mapMikhmonPlan("default"), "default");
+  assertEquals(mapMikhmonPlan("something-new"), "other");
 });
 
 Deno.test("parseMikhmonExpiry handles timestamps and refuses voucher codes", () => {

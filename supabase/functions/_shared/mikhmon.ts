@@ -53,7 +53,10 @@ export function mapMikhmonPlan(profile: unknown): string {
   if (["7d", "7day", "7days", "7-day", "7-days", "1w", "weekly"].includes(p)) return "7d";
   if (["14d", "14day", "14days", "14-day", "14-days", "2w"].includes(p)) return "14d";
   if (["30d", "30day", "30days", "30-day", "30-days", "4w2d", "monthly"].includes(p)) return "30d";
-  return "mikhmon";
+  if (["6h", "6hour", "6hours", "6-hour", "6-hours"].includes(p)) return "6h";
+  if (p === "default") return "default";
+  // Safety net only: every profile actually in use on the routers is mapped above.
+  return "other";
 }
 
 /**
@@ -82,10 +85,9 @@ export function toMikhmonRow(input: MikhmonUserInput): MikhmonRow | null {
     String(input?.["limit-uptime"] ?? "") === "1s";
 
   // Manual vouchers must contribute to revenue exactly like the paid plans.
-  // The real Mikhmon profile maps to the dashboard plan code (24hr = 4 GB /
-  // ₦200). Unknown profiles stay "mikhmon" and contribute zero.
+  // Every actual Mikhmon profile (24hr/3d/5d/7d/14d/30d/6h/default) is mapped.
   const mapped = mapMikhmonPlan(input?.profile);
-  const contact = mapped === "mikhmon" ? "Mikhmon" : `Mikhmon (${mapped})`;
+  const contact = mapped === "other" ? "Mikhmon" : `Mikhmon (${mapped})`;
 
   return {
     transaction_id: `mikhmon-${name}`,
