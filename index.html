@@ -61,6 +61,7 @@
   td{padding:16px 24px;border-bottom:1px solid var(--border);font-size:14px;vertical-align:middle}
   tbody tr{transition:background .15s}
   tbody tr:hover{background:rgba(124,58,237,.05)}
+  tbody tr[data-status="processed"] td{background:rgba(22,163,74,.07)}
   .username{font-weight:700;margin-bottom:4px}
   .user-email{font-size:12px;color:var(--text-secondary);word-break:break-word}
   .password-cell{font-family:'JetBrains Mono',monospace;font-size:13px;white-space:nowrap;overflow-x:auto;max-width:150px}
@@ -387,7 +388,7 @@ async function loadUsers(p){
   $('pageInfo').innerHTML=d.total?`Showing <strong>${start}–${end}</strong> of <strong>${d.total}</strong> clients`:'No clients';
   $('prevBtn').classList.toggle('disabled',d.page<=1);
   $('nextBtn').classList.toggle('disabled',end>=d.total);
-  $('users').innerHTML=d.data.map(u=>{const st=effStatus(u);return `<tr>
+  $('users').innerHTML=d.data.map(u=>{const st=effStatus(u);return `<tr data-status="${st}">
     <td><div class="username">${u.mikrotik_username||''}</div><div class="user-email">${u.customer_email||''}</div></td>
     <td class="password-cell">${u.mikrotik_password||''}</td>
     <td><span class="plan-tag tag-${u.plan||'24hr'}">${planLabel(u.plan)}</span></td>
