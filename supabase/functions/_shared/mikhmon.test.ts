@@ -1,4 +1,4 @@
-import { assertEquals, assert } from "https://deno.land/std@0.177.0/testing/asserts.ts";
+﻿import { assertEquals, assert } from "https://deno.land/std@0.177.0/testing/asserts.ts";
 import {
   mapMikhmonPlan,
   parseMikhmonExpiry,
@@ -35,9 +35,9 @@ Deno.test("toMikhmonRow builds a safe payment_queue row", () => {
     comment: "2026-10-22 18:22:00",
   })!;
   assertEquals(row.transaction_id, "mikhmon-mktabc123");
-  assertEquals(row.customer_email, "Mikhmon");
+  assertEquals(row.customer_email, "Mikhmon (24hr)");
   assertEquals(row.customer_phone, "Mikhmon");
-  assertEquals(row.plan, "24hr");
+  assertEquals(row.plan, "mikhmon");
   assertEquals(row.mikrotik_username, "mktabc123");
   assertEquals(row.mikrotik_password, "pass1234");
   assertEquals(row.mac_address, "AA:BB:CC:DD:EE:FF");
@@ -147,9 +147,9 @@ Deno.test("sync creates new users, updates existing, expires missing only when c
   assertEquals(res.failed, 0);
 
   const newRow = db.tables.payment_queue.find((r) => r.transaction_id === "mikhmon-new")!;
-  assertEquals(newRow.customer_email, "Mikhmon");
+  assertEquals(newRow.customer_email, "Mikhmon (7d)");
   assertEquals(newRow.customer_phone, "Mikhmon");
-  assertEquals(newRow.plan, "7d");
+  assertEquals(newRow.plan, "mikhmon");
   assertEquals(newRow.status, "processed");
   assertEquals(newRow.expires_at, "2026-10-22T17:22:00.000Z");
 
@@ -194,3 +194,4 @@ Deno.test("sync sends disabled users as expired", async () => {
   assertEquals(row.status, "expired");
   assert(db.ops.some((o) => o.type === "insert"));
 });
+

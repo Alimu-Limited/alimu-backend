@@ -79,11 +79,17 @@ export function toMikhmonRow(input: MikhmonUserInput): MikhmonRow | null {
   const disabled = String(input?.disabled ?? "").toLowerCase() === "true" ||
     String(input?.["limit-uptime"] ?? "") === "1s";
 
+  // Keep manual users OUT of the paid-plan revenue totals. The actual Mikhmon
+  // profile is shown in the contact line, while the dashboard plan tag stays
+  // "Mikhmon" so SUM(CASE plan ...) cannot invent revenue.
+  const mapped = mapMikhmonPlan(input?.profile);
+  const contact = mapped === "mikhmon" ? "Mikhmon" : `Mikhmon (${mapped})`;
+
   return {
     transaction_id: `mikhmon-${name}`,
-    customer_email: "Mikhmon",
+    customer_email: contact,
     customer_phone: "Mikhmon",
-    plan: mapMikhmonPlan(input?.profile),
+    plan: "mikhmon",
     mikrotik_username: name,
     mikrotik_password: String(input?.password ?? ""),
     mac_address: mac,
